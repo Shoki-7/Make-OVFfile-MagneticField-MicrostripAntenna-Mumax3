@@ -3,47 +3,7 @@ import matplotlib.pyplot as plt
 from pathlib2 import Path
 import os
 
-def write_oommf_file(output_filename, n_x, n_y, n_z, xy_plane_list, zero_plane_list, z_plane_list, current_direction):
-    header_template = f"""# OOMMF OVF 2.0
-# Segment count: 1
-# Begin: Segment
-# Begin: Header
-# valuedim: 3
-# valueunits: 1 1 1
-# xnodes: {n_x}
-# ynodes: {n_y}
-# znodes: {n_z}
-# End: Header
-# Begin: Data Binary 4
-"""
-    footer = """# End: Data Binary 4
-# End: Segment
-"""
-
-    with open(output_filename, 'w', encoding='CP932', newline='\n') as file:
-        for z in range(n_z):
-            file.write(header_template)
-
-            # 現在の2次元配列を取得
-            xy_plane = xy_plane_list[z]
-            zero_plane = zero_plane_list[z]
-            z_plane = z_plane_list[z]
-
-            # yとxの範囲はxy_planeのサイズに依存
-            y_size = len(xy_plane)
-            for y in range(y_size):
-                x_size = len(xy_plane[y])
-                for x in range(x_size):
-                    # 各配列の対応する要素を取得して、空白区切りで出力
-                    if current_direction == 'x':
-                        line = f"{zero_plane[y][x]} {xy_plane[y][x]} {z_plane[y][x]} "
-                    else:
-                        line = f"{xy_plane[y][x]} {zero_plane[y][x]} {z_plane[y][x]} "
-                    file.write(line)
-                file.write("\n")
-
-            file.write(footer)
-            file.write("\n")
+import output_ovf as oo
 
 # number of cell
 n_x = 1600
@@ -64,6 +24,7 @@ size_cell_z = size_z / n_z
 ant_width = 3000e-9     # [m]
 ant_thickness = 100e-9  # [m]
 ant_position = 45e-6    # [m]
+# ant_position = 20e-6    # [m]
 input_current = 10e-3    # [A]
 input_current_direction = ['x', 'y'][1]
 
@@ -106,6 +67,10 @@ B_pump_xy_plane_arr_list = []
 B_pump_zero_arr_list = []
 B_pump_z_arr_list = []
 
+B_pump_x_list = []
+B_pump_y_list = []
+B_pump_z_list = []
+
 for z_pnt in range(n_z):
     # depth between center of antenna thickness and cell center
     z_value = ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt]
@@ -113,41 +78,70 @@ for z_pnt in range(n_z):
     # print(f"z_mesh shape: {z_mesh.shape}")
     # print(f"z_mesh: {z_mesh}")
 
-    B_pump_xy_plane_arr = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
+    if input_current_direction == 'x':
+        B_pump_y = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
+        B_pump_y_list.append(B_pump_y)
 
-    B_pump_xy_plane_arr_list.append(B_pump_xy_plane_arr)
+        B_pump_x = np.full_like(B_pump_y, 0.)
+        B_pump_x_list.append(B_pump_x)
 
-    B_pump_z_arr = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (z_mesh+ant_half_thickness)/2 * np.log( ((z_mesh+ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh+ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) - (z_mesh-ant_half_thickness)/2*np.log( ((z_mesh-ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh-ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) + (xy_plane_arr+ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr+ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr+ant_half_width)) ) - (xy_plane_arr-ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr-ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr-ant_half_width)) ) )
+    elif input_current_direction == 'y':
+        B_pump_x = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
+        B_pump_x_list.append(B_pump_x)
 
-    B_pump_z_arr_list.append(B_pump_z_arr)
+        B_pump_y = np.full_like(B_pump_x, 0.)
+        B_pump_y_list.append(B_pump_y)
 
-    B_pump_zero_arr_list.append(np.full_like(B_pump_xy_plane_arr, 0.))
+    # B_pump_xy_plane_arr = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
 
-    print(np.max(B_pump_xy_plane_arr))
-    print(np.max(B_pump_z_arr))
-    print(np.max(np.sqrt(B_pump_xy_plane_arr**2 + B_pump_z_arr**2)))
+    # B_pump_xy_plane_arr_list.append(B_pump_xy_plane_arr)
 
-    # plt.figure(figsize=(10, 8))
-    # plt.contourf(x_mesh, y_mesh, B_pump_xy_plane_arr, cmap='viridis')
-    # plt.colorbar(label='B_pump values [T]')
-    # plt.xlabel('x [m]')
-    # plt.ylabel('y [m]')
-    # plt.title('B_pump_xy_plane_arr Visualization')
-    # plt.show()
+    B_pump_z = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (z_mesh+ant_half_thickness)/2 * np.log( ((z_mesh+ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh+ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) - (z_mesh-ant_half_thickness)/2*np.log( ((z_mesh-ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh-ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) + (xy_plane_arr+ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr+ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr+ant_half_width)) ) - (xy_plane_arr-ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr-ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr-ant_half_width)) ) )
 
-    # plt.figure(figsize=(10, 8))
-    # plt.contourf(x_mesh, y_mesh, B_pump_z, cmap='viridis')
-    # plt.colorbar(label='B_pump_z values [T]')
-    # plt.xlabel('x [m]')
-    # plt.ylabel('y [m]')
-    # plt.title('B_pump_z Visualization')
-    # plt.show()
+    B_pump_z_list.append(B_pump_z)
+
+    # B_pump_z_arr = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (z_mesh+ant_half_thickness)/2 * np.log( ((z_mesh+ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh+ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) - (z_mesh-ant_half_thickness)/2*np.log( ((z_mesh-ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh-ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) + (xy_plane_arr+ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr+ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr+ant_half_width)) ) - (xy_plane_arr-ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr-ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr-ant_half_width)) ) )
+
+    # B_pump_z_arr_list.append(B_pump_z_arr)
+
+    # B_pump_zero_arr_list.append(np.full_like(B_pump_xy_plane_arr, 0.))
+
+    print("max(B_pump_x) [T] :", np.max(B_pump_x))
+    print("max(B_pump_y) [T] :", np.max(B_pump_y))
+    print("max(B_pump_z) [T] :", np.max(B_pump_z))
+    print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
+
+    if 0:
+        plt.figure(figsize=(10, 8))
+        plt.contourf(x_mesh, y_mesh, B_pump_x, cmap='viridis')
+        plt.colorbar(label='B_pump values [T]')
+        plt.xlabel('x [m]')
+        plt.ylabel('y [m]')
+        plt.title('B_pump_x Visualization')
+        plt.show()
+
+        plt.figure(figsize=(10, 8))
+        plt.contourf(x_mesh, y_mesh, B_pump_y, cmap='viridis')
+        plt.colorbar(label='B_pump values [T]')
+        plt.xlabel('x [m]')
+        plt.ylabel('y [m]')
+        plt.title('B_pump_y Visualization')
+        plt.show()
+
+        plt.figure(figsize=(10, 8))
+        plt.contourf(x_mesh, y_mesh, B_pump_z, cmap='viridis')
+        plt.colorbar(label='B_pump_z values [T]')
+        plt.xlabel('x [m]')
+        plt.ylabel('y [m]')
+        plt.title('B_pump_z Visualization')
+        plt.show()
 
 dir_str = input('Please input the output directory path: ')
 dir_path = Path(dir_str)
 output_filename = 'antenna.ovf'
 output_path = os.path.join(dir_path, output_filename)
-write_oommf_file(output_path, n_x, n_y, n_z, B_pump_xy_plane_arr_list, B_pump_zero_arr_list, B_pump_z_arr_list, input_current_direction)
+
+oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
 
 
 # B_pump = np.sqrt(B_pump_x**2 + B_pump_z**2)
