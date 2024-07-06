@@ -2,18 +2,29 @@ import numpy as np
 import matplotlib.pyplot as plt
 from pathlib2 import Path
 import os
+from matplotlib.colors import LinearSegmentedColormap
 
 import output_ovf as oo
 
+def gen_cmap_rgb(cols):
+    nmax = float(len(cols)-1)
+    cdict = {'red':[], 'green':[], 'blue':[]}
+    for n, c in enumerate(cols):
+        loc = n/nmax
+        cdict['red'  ].append((loc, c[0], c[0]))
+        cdict['green'].append((loc, c[1], c[1]))
+        cdict['blue' ].append((loc, c[2], c[2]))
+    return LinearSegmentedColormap('cmap', cdict)
+
 # number of cell
-n_x = 1600
-n_y = 800
-n_z = 1
+n_x = 512
+n_y = 512
+n_z = 32
 
 # size of sample
-size_x = 80e-6		#  80 um
-size_y = 40e-6		#  40 um
-size_z = 300e-9		# 300 nm
+size_x = 25.6e-6		# [m]
+size_y = 25.6e-6		# [m]
+size_z = 10e-6		# [m]
 
 # size of sell
 size_cell_x = size_x / n_x
@@ -21,9 +32,13 @@ size_cell_y = size_y / n_y
 size_cell_z = size_z / n_z
 
 # antenna
-ant_width = 3000e-9     # [m]
-ant_thickness = 100e-9  # [m]
-ant_position = 45e-6    # [m]
+# ant_width = 500000e-9     # [m]
+# ant_thickness = 18000e-9  # [m]
+# ant_position = 5e-6    # [m]
+ant_width = 500000e-9     # [m]
+ant_thickness = 18000e-9  # [m]
+ant_position = size_x/2 - ant_width/2    # [m]
+# ant_position  = size_x/2
 # ant_position = 20e-6    # [m]
 input_current = 10e-3    # [A]
 input_current_direction = ['x', 'y'][1]
@@ -31,7 +46,7 @@ input_current_direction = ['x', 'y'][1]
 input_voltage = 5   # [V]
 input_current = input_voltage / 50.
 
-distance_between_antenna_and_sample = 1e-9  # [m]
+distance_between_antenna_and_sample = 0.1e-9  # [m]
 
 ant_half_width = ant_width / 2
 ant_half_thickness = ant_thickness / 2
@@ -75,8 +90,6 @@ for z_pnt in range(n_z):
     # depth between center of antenna thickness and cell center
     z_value = ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt]
     z_mesh = np.full_like(x_mesh, z_value)
-    # print(f"z_mesh shape: {z_mesh.shape}")
-    # print(f"z_mesh: {z_mesh}")
 
     if input_current_direction == 'x':
         B_pump_y = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
@@ -92,19 +105,10 @@ for z_pnt in range(n_z):
         B_pump_y = np.full_like(B_pump_x, 0.)
         B_pump_y_list.append(B_pump_y)
 
-    # B_pump_xy_plane_arr = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
-
-    # B_pump_xy_plane_arr_list.append(B_pump_xy_plane_arr)
 
     B_pump_z = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (z_mesh+ant_half_thickness)/2 * np.log( ((z_mesh+ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh+ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) - (z_mesh-ant_half_thickness)/2*np.log( ((z_mesh-ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh-ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) + (xy_plane_arr+ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr+ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr+ant_half_width)) ) - (xy_plane_arr-ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr-ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr-ant_half_width)) ) )
 
     B_pump_z_list.append(B_pump_z)
-
-    # B_pump_z_arr = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (z_mesh+ant_half_thickness)/2 * np.log( ((z_mesh+ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh+ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) - (z_mesh-ant_half_thickness)/2*np.log( ((z_mesh-ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh-ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) + (xy_plane_arr+ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr+ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr+ant_half_width)) ) - (xy_plane_arr-ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr-ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr-ant_half_width)) ) )
-
-    # B_pump_z_arr_list.append(B_pump_z_arr)
-
-    # B_pump_zero_arr_list.append(np.full_like(B_pump_xy_plane_arr, 0.))
 
     print("max(B_pump_x) [T] :", np.max(B_pump_x))
     print("max(B_pump_y) [T] :", np.max(B_pump_y))
@@ -112,8 +116,10 @@ for z_pnt in range(n_z):
     print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
 
     if 0:
+        cmap = gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
+
         plt.figure(figsize=(10, 8))
-        plt.contourf(x_mesh, y_mesh, B_pump_x, cmap='viridis')
+        plt.pcolor(x_mesh, y_mesh, B_pump_x, cmap=cmap)
         plt.colorbar(label='B_pump values [T]')
         plt.xlabel('x [m]')
         plt.ylabel('y [m]')
@@ -121,7 +127,7 @@ for z_pnt in range(n_z):
         plt.show()
 
         plt.figure(figsize=(10, 8))
-        plt.contourf(x_mesh, y_mesh, B_pump_y, cmap='viridis')
+        plt.pcolor(x_mesh, y_mesh, B_pump_y, cmap=cmap)
         plt.colorbar(label='B_pump values [T]')
         plt.xlabel('x [m]')
         plt.ylabel('y [m]')
@@ -129,7 +135,7 @@ for z_pnt in range(n_z):
         plt.show()
 
         plt.figure(figsize=(10, 8))
-        plt.contourf(x_mesh, y_mesh, B_pump_z, cmap='viridis')
+        plt.pcolor(x_mesh, y_mesh, B_pump_z, cmap=cmap)
         plt.colorbar(label='B_pump_z values [T]')
         plt.xlabel('x [m]')
         plt.ylabel('y [m]')
