@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from mpl_toolkits.axes_grid1 import Divider, Size
 from mpl_toolkits.axes_grid1.mpl_axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
+import tempfile
 
 def calc_magnetic_field(xy_plane_arr, z_mesh, ant_width: float, ant_thickness: float, input_current: float, in_or_out_of_plane: bool):
 
@@ -19,7 +20,7 @@ def calc_magnetic_field(xy_plane_arr, z_mesh, ant_width: float, ant_thickness: f
 
     return B_pump
 
-def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, distance_between_antenna_and_sample: float, input_current: float, check=False):
+def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, distance_between_antenna_and_sample: float, input_current: float, check=False, current_step=None):
     # size of cell
     size_cell_x = size_x / n_x
     size_cell_y = size_y / n_y
@@ -49,12 +50,18 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
     B_pump_y_list = []
     B_pump_z_list = []
 
+    if check:
+        # Only process the current_step when checking
+        z_range = range(current_step, current_step + 1)
+    else:
+        z_range = range(n_z)
+
     # depth between center of antenna thickness
-    z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in range(n_z)]
+    z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in z_range]
 
     plot_data = []
 
-    for z_value in z_value_list:
+    for i, z_value in enumerate(z_value_list):
         # cell center
         z_mesh = np.full_like(x_mesh, z_value)
 
@@ -83,7 +90,8 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
         print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
         
         if check:
-            plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
+            # plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
+            plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, i))
         
     if len(plot_data) != 0:
         return plot_data
@@ -115,7 +123,7 @@ def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
 
     return plot_data
 
-def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z_value):
+def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z):
     # color map
     cmap = gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
 
@@ -139,9 +147,13 @@ def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z_value):
         ax.set_xlabel(f'x ({x_unit})', labelpad=0, fontsize=7)      #x-axis label
         ax.set_ylabel(f'y ({y_unit})', labelpad=1, fontsize=7)      #y-axis label
 
-    # plt.show()
+        ax.set_title(f"Z-slice: {z}")
+    
+    with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
+        plt.savefig(tmp.name)
+    plt.close(fig)
 
-    return plt
+    return tmp.name
 
 def print_field_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
     # color map

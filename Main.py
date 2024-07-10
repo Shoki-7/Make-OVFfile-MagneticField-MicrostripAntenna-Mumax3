@@ -7,8 +7,8 @@ import calc_field as cf
 
 import sys
 import os
-from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog)
-from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog, QProgressBar)
+from PyQt5.QtGui import QFont, QIcon, QPixmap
 from PyQt5.QtCore import Qt
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -40,17 +40,16 @@ def add_si_prefix(value, unit):
     return f"{decimal_normalize(round(new_value, 3))}{si_prefix}{unit}"
 
 class CheckWindow(QDialog):
-    def __init__(self, plot_data, parent=None):
+    def __init__(self, image_paths, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Check Plot')
         self.setGeometry(200, 200, 1100, 420)
         
         layout = QVBoxLayout()
         
-        # Matplotlib figure
-        self.plt, self.fig, self.axes, self.caxes, self.shrink = cf.figure_size_setting_check(3)
-        self.canvas = FigureCanvas(self.fig)
-        layout.addWidget(self.canvas)
+        # Image display
+        self.image_label = QLabel()
+        layout.addWidget(self.image_label)
         
         # Slider and buttons layout
         slider_layout = QHBoxLayout()
@@ -63,7 +62,7 @@ class CheckWindow(QDialog):
         # Slider for z-value
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(0)
-        self.slider.setMaximum(len(plot_data) - 1)
+        self.slider.setMaximum(len(image_paths) - 1)
         self.slider.valueChanged.connect(self.update_plot)
         slider_layout.addWidget(self.slider)
         
@@ -85,43 +84,15 @@ class CheckWindow(QDialog):
         
         self.setLayout(layout)
         
-        self.plot_data = plot_data
+        self.image_paths = image_paths
         self.update_plot()
     
     def update_plot(self):
-        # self.fig.clear()
         z = self.slider.value()
-        data = self.plot_data[z]
-        
-        cmap = cf.gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
-
-        x_arr = data["x_arr"]
-        y_arr = data["y_arr"]
-        x_unit = data["x_unit"]
-        y_unit = data["y_unit"]
-
-        for i in range(3):
-            ax = self.axes[i]
-            cax = self.caxes[i]
-
-            B_pump = data[["B_pump_x", "B_pump_y", "B_pump_z"][i]]
-            B_pump_unit = data[["B_pump_x_unit", "B_pump_y_unit", "B_pump_z_unit"][i]]
-            
-            z_min, z_max = 0 if i != 2 else min(list(map(lambda x: min(x), B_pump))), max(list(map(lambda x: max(x), B_pump))) if i != 2 else max(list(map(lambda x: max(x), abs(B_pump))))
-            im = ax.pcolor(x_arr, y_arr, B_pump, cmap=cmap, rasterized=True, vmin=z_min, vmax=z_max)
-            ax.locator_params(axis='x',nbins=10)
-            ax.locator_params(axis='y',nbins=10)
-            
-            cbar = self.fig.colorbar(im, cax=cax, shrink=self.shrink)             #show colorbar
-            cbar.set_label(f'Pumped field ({B_pump_unit})', labelpad=2, fontsize=7)
-
-            ax.set_xlabel(f'x ({x_unit})', labelpad=0, fontsize=7)      #x-axis label
-            ax.set_ylabel(f'y ({y_unit})', labelpad=1, fontsize=7)      #y-axis label
-
-            ax.set_title(f"Z-slice: {z}")
-        
-        self.canvas.draw()
-
+        pixmap = QPixmap(self.image_paths[z])
+        self.image_label.setPixmap(pixmap)
+        self.image_label.setScaledContents(True)
+    
     def decrease_z(self):
         new_value = max(self.slider.value() - 1, self.slider.minimum())
         self.slider.setValue(new_value)
@@ -133,8 +104,19 @@ class CheckWindow(QDialog):
     def save_plot(self):
         path = self.save_path.text()
         if path:
-            self.fig.savefig(path)
+            current_image = self.image_paths[self.slider.value()]
+            pixmap = QPixmap(current_image)
+            pixmap.save(path)
             print(f"Plot saved to {path}")
+
+    def closeEvent(self, event):
+        # Delete temporary files when closing the window
+        for path in self.image_paths:
+            try:
+                os.remove(path)
+            except:
+                pass
+        super().closeEvent(event)
 
 class ModernUI(QWidget):
     def __init__(self):
@@ -342,6 +324,12 @@ class ModernUI(QWidget):
         button_layout.addWidget(self.calculate_button)
         main_layout.addLayout(button_layout)
 
+        # Add the progress bar
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.hide()
+        main_layout.addWidget(self.progress_bar)
+
         self.setLayout(main_layout)
 
     def update_sizes(self, dimension, changed_field):
@@ -448,10 +436,11 @@ class ModernUI(QWidget):
             pass
     
     def open_check_window(self):
-        plot_data = self.calculate(True)
-        if plot_data:
-            self.check_window = CheckWindow(plot_data, self)
+        image_paths = self.calculate(True)
+        if image_paths:
+            self.check_window = CheckWindow(image_paths, self)
             self.check_window.show()
+        self.progress_bar.hide()
 
     def browse_dir(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
@@ -461,6 +450,9 @@ class ModernUI(QWidget):
     def calculate(self, check):
         if self.save_conditions.isChecked():
             self.save_current_conditions()
+        
+        self.progress_bar.show()
+        self.progress_bar.setValue(0)
 
         # Here you would implement the calculation logic
         print("Calculation triggered!")
@@ -483,20 +475,40 @@ class ModernUI(QWidget):
 
             input_current =  float(self.input_current.text())
 
-            if check:
-                return cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, check)
+            total_steps = n_z if check else 1
+            for step in range(total_steps):
+                if check:
+                    progress = int((step + 1) / total_steps * 100)
+                    self.progress_bar.setValue(progress)
+                    QApplication.processEvents()
+                    result = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, check, step)
+                    if step == 0:
+                        image_paths = result
+                else:
+                    self.progress_bar.setValue(50)
+                    QApplication.processEvents()
+                    B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current)
 
-            B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current)
+            if not check:
+                self.progress_bar.setValue(75)
+                QApplication.processEvents()
+                dir_path = self.dir_str.text()
+                output_filename = self.output_filename.text() + self.output_extension.currentText()
+                output_path = os.path.join(dir_path, output_filename)
+                oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
 
-            dir_path = self.dir_str.text()
-            output_filename = self.output_filename.text() + self.output_extension.currentText()
-
-            output_path = os.path.join(dir_path, output_filename)
-            oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
+            self.progress_bar.setValue(100)
+            QApplication.processEvents()
 
         except ValueError:
             print("Value error")
+            self.progress_bar.hide()
             return None if check else None
+
+        self.progress_bar.hide()
+        print(image_paths)
+        print(len(image_paths))
+        return image_paths if check else None
         
     
     def save_current_conditions(self):
