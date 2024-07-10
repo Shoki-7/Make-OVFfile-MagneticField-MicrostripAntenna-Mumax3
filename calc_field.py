@@ -52,6 +52,8 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
     # depth between center of antenna thickness
     z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in range(n_z)]
 
+    plot_data = []
+
     for z_value in z_value_list:
         # cell center
         z_mesh = np.full_like(x_mesh, z_value)
@@ -81,9 +83,65 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
         print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
         
         if check:
-            print_field_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z)
+            plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
+        
+    if len(plot_data) != 0:
+        return plot_data
     
     return B_pump_x_list, B_pump_y_list, B_pump_z_list
+
+def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
+    
+    x_exp, x_unit = get_si_prefix(max(x_arr), "m")
+    y_exp, y_unit = get_si_prefix(max(y_arr), "m")
+
+    B_pump_x_exp, B_pump_x_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump_x))), "T")
+    B_pump_y_exp, B_pump_y_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump_y))), "T")
+    B_pump_z_exp, B_pump_z_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump_z))), "T")
+
+
+    plot_data = {
+        'x_arr': x_arr / (10**x_exp),
+        'y_arr': y_arr / (10**y_exp),
+        'B_pump_x': B_pump_x / (10**B_pump_x_exp),
+        'B_pump_y': B_pump_y / (10**B_pump_y_exp),
+        'B_pump_z': B_pump_z / (10**B_pump_z_exp),
+        'x_unit': x_unit,
+        'y_unit': y_unit,
+        'B_pump_x_unit': B_pump_x_unit,
+        'B_pump_y_unit': B_pump_y_unit,
+        'B_pump_z_unit': B_pump_z_unit
+    }
+
+    return plot_data
+
+def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z_value):
+    # color map
+    cmap = gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
+
+    plt, fig, axes, caxes, shrink = figure_size_setting(3)
+
+    for i in range(3):
+        ax = axes[i]
+        cax = caxes[i]
+        x_exp, x_unit = get_si_prefix(max(x_arr), "m")
+        y_exp, y_unit = get_si_prefix(max(y_arr), "m")
+        B_pump = [B_pump_x, B_pump_y, B_pump_z][i]
+        z_exp, z_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump))), "T")
+        z_min, z_max = 0 if i != 2 else min(list(map(lambda x: min(x), B_pump / (10**z_exp)))), max(list(map(lambda x: max(x), B_pump / (10**z_exp)))) if i != 2 else max(list(map(lambda x: max(x), abs(B_pump / (10**z_exp)))))
+        im = ax.pcolor(x_arr / (10**x_exp), y_arr / (10**y_exp), B_pump / (10**z_exp), cmap=cmap, rasterized=True, vmin=z_min, vmax=z_max)
+        ax.locator_params(axis='x',nbins=10)
+        ax.locator_params(axis='y',nbins=10)
+        
+        cbar = fig.colorbar(im, cax=cax, shrink=shrink)             #show colorbar
+        cbar.set_label(f'Pumped field ({z_unit})', labelpad=2, fontsize=7)
+
+        ax.set_xlabel(f'x ({x_unit})', labelpad=0, fontsize=7)      #x-axis label
+        ax.set_ylabel(f'y ({y_unit})', labelpad=1, fontsize=7)      #y-axis label
+
+    # plt.show()
+
+    return plt
 
 def print_field_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
     # color map
@@ -109,9 +167,9 @@ def print_field_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
         ax.set_xlabel(f'x ({x_unit})', labelpad=0, fontsize=7)      #x-axis label
         ax.set_ylabel(f'y ({y_unit})', labelpad=1, fontsize=7)      #y-axis label
 
-    plt.show()
+    # plt.show()
 
-    return
+    return plt
 
 def figure_setting():
     plt.rcParams['pdf.fonttype'] = 42           #true type font
@@ -150,6 +208,48 @@ def figure_size_setting(num_plots=3):
 
     fig_w_inch = num_plots * (ax_w_inch + colorbar_margin_inch + colorbar_width_inch) + (num_plots - 1) * inter_plot_margin_inch + ax_margin_inch[0] + ax_margin_inch[2]
     fig_h_inch = ax_h_inch + ax_margin_inch[1] + ax_margin_inch[3]
+
+    fig = plt.figure(dpi=fig_dpi, figsize=(fig_w_inch, fig_h_inch))
+    
+    ax_p_w = [Size.Fixed(ax_margin_inch[0])] + [Size.Fixed(ax_w_inch), Size.Fixed(colorbar_margin_inch), Size.Fixed(colorbar_width_inch), Size.Fixed(inter_plot_margin_inch)] * (num_plots - 1) + [Size.Fixed(ax_w_inch), Size.Fixed(colorbar_margin_inch), Size.Fixed(colorbar_width_inch), Size.Fixed(ax_margin_inch[2])]
+
+    ax_p_h = [Size.Fixed(ax_margin_inch[1]), Size.Fixed(ax_h_inch)]
+    divider = Divider(fig, (0.0, 0.0, 1.0, 1.0), ax_p_w, ax_p_h, aspect=False)
+    
+    axes = []
+    caxes = []
+    for i in range(num_plots):
+        ax = Axes(fig, divider.get_position())
+        ax.set_axes_locator(divider.new_locator(nx=4*i+1, ny=1))
+        fig.add_axes(ax)
+        axes.append(ax)
+
+        color_ax = Axes(fig, divider.get_position())
+        color_ax.set_axes_locator(divider.new_locator(nx=4*i+3, ny=1))
+        fig.add_axes(color_ax)
+        caxes.append(color_ax)
+
+    # colorbar size
+    shrink = ax_h_inch / fig_h_inch
+
+    return plt, fig, axes, caxes, shrink
+
+def figure_size_setting_check(num_plots=3):
+    plt = figure_setting()
+    ax_w_px = 200  # プロット領域の幅をピクセル単位で指定
+    ax_h_px = 200  # プロット領域の高さをピクセル単位で指定
+
+    fig_dpi = 150
+    ax_w_inch = ax_w_px / fig_dpi
+    ax_h_inch = ax_h_px / fig_dpi
+    ax_margin_inch = (0.7, 0.5, 0.7, 0.5)  # Left,Top,Right,Bottom [inch]
+    inter_plot_margin_inch = 0.7  # グラフ間の余白 [inch]
+    colorbar_width_inch = 0.075  # カラーバーの幅 [inch]
+    colorbar_margin_inch = 0.05  # カラーバーと図の余白 [inch]
+
+    fig_w_inch = num_plots * (ax_w_inch + colorbar_margin_inch + colorbar_width_inch) + (num_plots - 1) * inter_plot_margin_inch + ax_margin_inch[0] + ax_margin_inch[2]
+    fig_h_inch = ax_h_inch + ax_margin_inch[1] + ax_margin_inch[3]
+    # print(fig_w_inch, fig_h_inch)
 
     fig = plt.figure(dpi=fig_dpi, figsize=(fig_w_inch, fig_h_inch))
     

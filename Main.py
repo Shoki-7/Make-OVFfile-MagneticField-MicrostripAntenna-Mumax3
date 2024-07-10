@@ -1,15 +1,18 @@
 from pathlib2 import Path
 import math
+import json
 
 import output_ovf as oo
 import calc_field as cf
 
 import sys
 import os
-from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog)
 from PyQt5.QtGui import QFont, QIcon
 from PyQt5.QtCore import Qt
-import json
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.figure import Figure
 
 def decimal_normalize(value):
     if isinstance(value, float) and value.is_integer():
@@ -35,6 +38,103 @@ def add_si_prefix(value, unit):
     si_prefix = prefixes[si_exponent]
     
     return f"{decimal_normalize(round(new_value, 3))}{si_prefix}{unit}"
+
+class CheckWindow(QDialog):
+    def __init__(self, plot_data, parent=None):
+        super().__init__(parent)
+        self.setWindowTitle('Check Plot')
+        self.setGeometry(200, 200, 1100, 420)
+        
+        layout = QVBoxLayout()
+        
+        # Matplotlib figure
+        self.plt, self.fig, self.axes, self.caxes, self.shrink = cf.figure_size_setting_check(3)
+        self.canvas = FigureCanvas(self.fig)
+        layout.addWidget(self.canvas)
+        
+        # Slider and buttons layout
+        slider_layout = QHBoxLayout()
+        
+        # Decrease z button
+        self.decrease_button = QPushButton("-")
+        self.decrease_button.clicked.connect(self.decrease_z)
+        slider_layout.addWidget(self.decrease_button)
+        
+        # Slider for z-value
+        self.slider = QSlider(Qt.Horizontal)
+        self.slider.setMinimum(0)
+        self.slider.setMaximum(len(plot_data) - 1)
+        self.slider.valueChanged.connect(self.update_plot)
+        slider_layout.addWidget(self.slider)
+        
+        # Increase z button
+        self.increase_button = QPushButton("+")
+        self.increase_button.clicked.connect(self.increase_z)
+        slider_layout.addWidget(self.increase_button)
+        
+        layout.addLayout(slider_layout)
+        
+        # Save path and button
+        save_layout = QHBoxLayout()
+        self.save_path = QLineEdit()
+        save_layout.addWidget(self.save_path)
+        self.save_button = QPushButton("Save")
+        self.save_button.clicked.connect(self.save_plot)
+        save_layout.addWidget(self.save_button)
+        layout.addLayout(save_layout)
+        
+        self.setLayout(layout)
+        
+        self.plot_data = plot_data
+        self.update_plot()
+    
+    def update_plot(self):
+        # self.fig.clear()
+        z = self.slider.value()
+        data = self.plot_data[z]
+        
+        cmap = cf.gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
+
+        x_arr = data["x_arr"]
+        y_arr = data["y_arr"]
+        x_unit = data["x_unit"]
+        y_unit = data["y_unit"]
+
+        for i in range(3):
+            ax = self.axes[i]
+            cax = self.caxes[i]
+
+            B_pump = data[["B_pump_x", "B_pump_y", "B_pump_z"][i]]
+            B_pump_unit = data[["B_pump_x_unit", "B_pump_y_unit", "B_pump_z_unit"][i]]
+            
+            z_min, z_max = 0 if i != 2 else min(list(map(lambda x: min(x), B_pump))), max(list(map(lambda x: max(x), B_pump))) if i != 2 else max(list(map(lambda x: max(x), abs(B_pump))))
+            im = ax.pcolor(x_arr, y_arr, B_pump, cmap=cmap, rasterized=True, vmin=z_min, vmax=z_max)
+            ax.locator_params(axis='x',nbins=10)
+            ax.locator_params(axis='y',nbins=10)
+            
+            cbar = self.fig.colorbar(im, cax=cax, shrink=self.shrink)             #show colorbar
+            cbar.set_label(f'Pumped field ({B_pump_unit})', labelpad=2, fontsize=7)
+
+            ax.set_xlabel(f'x ({x_unit})', labelpad=0, fontsize=7)      #x-axis label
+            ax.set_ylabel(f'y ({y_unit})', labelpad=1, fontsize=7)      #y-axis label
+
+            ax.set_title(f"Z-slice: {z}")
+        
+        self.canvas.draw()
+
+    def decrease_z(self):
+        new_value = max(self.slider.value() - 1, self.slider.minimum())
+        self.slider.setValue(new_value)
+    
+    def increase_z(self):
+        new_value = min(self.slider.value() + 1, self.slider.maximum())
+        self.slider.setValue(new_value)
+    
+    def save_plot(self):
+        path = self.save_path.text()
+        if path:
+            self.fig.savefig(path)
+            print(f"Plot saved to {path}")
 
 class ModernUI(QWidget):
     def __init__(self):
@@ -233,9 +333,14 @@ class ModernUI(QWidget):
 
         main_layout.addWidget(output_group)
 
-        # Calculate button
-        calculate_button = QPushButton("Calculate", clicked=self.calculate)
-        main_layout.addWidget(calculate_button)
+        # Add check and calculate buttons in a horizontal layout
+        button_layout = QHBoxLayout()
+        self.check_button = QPushButton("Check", clicked=self.open_check_window)
+        button_layout.addWidget(self.check_button)
+        self.calculate_button = QPushButton("Calculate")
+        self.calculate_button.clicked.connect(lambda: self.calculate(False))
+        button_layout.addWidget(self.calculate_button)
+        main_layout.addLayout(button_layout)
 
         self.setLayout(main_layout)
 
@@ -341,16 +446,22 @@ class ModernUI(QWidget):
         except ValueError:
             # If conversion fails, don't update the sizes
             pass
+    
+    def open_check_window(self):
+        plot_data = self.calculate(True)
+        if plot_data:
+            self.check_window = CheckWindow(plot_data, self)
+            self.check_window.show()
 
     def browse_dir(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if dir_path:
             self.dir_str.setText(dir_path)
 
-    def calculate(self):
+    def calculate(self, check):
         if self.save_conditions.isChecked():
             self.save_current_conditions()
-        
+
         # Here you would implement the calculation logic
         print("Calculation triggered!")
         try:
@@ -371,18 +482,21 @@ class ModernUI(QWidget):
             distance_between_antenna_and_sample = float(self.distance.text())
 
             input_current =  float(self.input_current.text())
-            field_check = self.field_check.isChecked()
 
-            B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, field_check)
+            if check:
+                return cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, check)
+
+            B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current)
 
             dir_path = self.dir_str.text()
             output_filename = self.output_filename.text() + self.output_extension.currentText()
 
             output_path = os.path.join(dir_path, output_filename)
             oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
+
         except ValueError:
             print("Value error")
-            pass
+            return None if check else None
         
     
     def save_current_conditions(self):
