@@ -1,14 +1,15 @@
 from pathlib2 import Path
-import os
 import math
 
 import output_ovf as oo
 import calc_field as cf
 
 import sys
+import os
 from PyQt5.QtWidgets import QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox
 from PyQt5.QtGui import QFont, QIcon
 from PyQt5.QtCore import Qt
+import json
 
 def decimal_normalize(value):
     if isinstance(value, float) and value.is_integer():
@@ -51,7 +52,7 @@ class ModernUI(QWidget):
             QLabel {
                 color: #333;
             }
-            QLineEdit {
+            QLineEdit, QComboBox {
                 padding: 5px;
                 border: 1px solid #ccc;
                 border-radius: 3px;
@@ -68,6 +69,16 @@ class ModernUI(QWidget):
             }
             QGroupBox {
                 font-weight: bold;
+            }
+            QComboBox {
+                background-color: #f8f8f8;
+                selection-background-color: #f00000
+            }
+            QComboBox::drop-down {
+                border: none;
+            }
+            QListView {
+                background-color : #f8f8f8;
             }
         """)
 
@@ -203,13 +214,22 @@ class ModernUI(QWidget):
         output_layout = QGridLayout()
         output_group.setLayout(output_layout)
 
-        self.dir_str = QLineEdit()
-        self.output_filename = QLineEdit("antenna.ovf")  # Original: 'antenna' + append_str + '.ovf'
+        self.dir_str = QLineEdit(os.getcwd())
+        self.output_filename = QLineEdit("antenna")
+        self.output_extension = QComboBox()
+        self.output_extension.addItem(".ovf")
+        self.output_extension.addItem(".txt")
+        self.save_conditions = QCheckBox("Save conditions")
+        self.load_button = QPushButton("Load", clicked=self.load_conditions)
+        
         output_layout.addWidget(QLabel("Path:"), 0, 0)
         output_layout.addWidget(self.dir_str, 0, 1)
         output_layout.addWidget(QPushButton("Browse", clicked=self.browse_dir), 0, 2)
         output_layout.addWidget(QLabel("Output Filename:"), 1, 0)
-        output_layout.addWidget(self.output_filename, 1, 1, 1, 2)
+        output_layout.addWidget(self.output_filename, 1, 1)
+        output_layout.addWidget(self.output_extension, 1, 2)
+        output_layout.addWidget(self.save_conditions, 2, 0)
+        output_layout.addWidget(self.load_button, 2, 2)
 
         main_layout.addWidget(output_group)
 
@@ -328,10 +348,96 @@ class ModernUI(QWidget):
             self.dir_str.setText(dir_path)
 
     def calculate(self):
+        if self.save_conditions.isChecked():
+            self.save_current_conditions()
+        
         # Here you would implement the calculation logic
         print("Calculation triggered!")
-        # You can access the input values using self.input_name.text()
-        # For example: n_x = int(self.n_x.text())
+        try:
+            n_x = int(self.n_x.text())
+            n_y = int(self.n_y.text())
+            n_z = int(self.n_z.text())
+
+            size_x = float(self.size_x.text())
+            size_y = float(self.size_y.text())
+            size_z = float(self.size_z.text())
+
+            input_current_direction = ['x', 'y'][1]
+
+            ant_width = float(self.ant_width.text())
+            ant_thickness = float(self.ant_thickness.text())
+            ant_position = float(self.ant_position.text())
+
+            distance_between_antenna_and_sample = float(self.distance.text())
+
+            input_current =  float(self.input_current.text())
+            field_check = self.field_check.isChecked()
+
+            B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, field_check)
+
+            dir_path = self.dir_str.text()
+            output_filename = self.output_filename.text() + self.output_extension.currentText()
+
+            output_path = os.path.join(dir_path, output_filename)
+            oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
+        except ValueError:
+            print("Value error")
+            pass
+        
+    
+    def save_current_conditions(self):
+        conditions = {
+            'n_x': self.n_x.text(),
+            'n_y': self.n_y.text(),
+            'n_z': self.n_z.text(),
+            'size_x': self.size_x.text(),
+            'size_y': self.size_y.text(),
+            'size_z': self.size_z.text(),
+            'ant_width': self.ant_width.text(),
+            'ant_thickness': self.ant_thickness.text(),
+            'ant_position': self.ant_position.text(),
+            'distance': self.distance.text(),
+            'input_current': self.input_current.text(),
+            'input_voltage': self.input_voltage.text(),
+            'input_power_dBm': self.input_power_dBm.text(),
+            'input_power_W': self.input_power_W.text(),
+            'impedance': self.impedance.text(),
+            'waveform': self.waveform.currentText(),
+            'field_check': self.field_check.isChecked(),
+            'dir_str': self.dir_str.text(),
+            'output_filename': self.output_filename.text(),
+            'output_extension': self.output_extension.currentText()
+        }
+        
+        with open(os.path.join(self.dir_str.text(), self.output_filename.text() + '_cond.json'), 'w') as f:
+            json.dump(conditions, f)
+    
+    def load_conditions(self):
+        file_name, _ = QFileDialog.getOpenFileName(self, "Load Conditions", "", "JSON Files (*.json)")
+        if file_name:
+            with open(file_name, 'r') as f:
+                conditions = json.load(f)
+            
+            self.n_x.setText(conditions['n_x'])
+            self.n_y.setText(conditions['n_y'])
+            self.n_z.setText(conditions['n_z'])
+            self.size_x.setText(conditions['size_x'])
+            self.size_y.setText(conditions['size_y'])
+            self.size_z.setText(conditions['size_z'])
+            self.ant_width.setText(conditions['ant_width'])
+            self.ant_thickness.setText(conditions['ant_thickness'])
+            self.ant_position.setText(conditions['ant_position'])
+            self.distance.setText(conditions['distance'])
+            self.input_current.setText(conditions['input_current'])
+            self.input_voltage.setText(conditions['input_voltage'])
+            self.input_power_dBm.setText(conditions['input_power_dBm'])
+            self.input_power_W.setText(conditions['input_power_W'])
+            self.impedance.setText(conditions['impedance'])
+            self.waveform.setCurrentText(conditions['waveform'])
+            self.field_check.setChecked(conditions['field_check'])
+            self.dir_str.setText(conditions['dir_str'])
+            self.output_filename.setText(conditions['output_filename'])
+            self.output_extension.setCurrentText(conditions['output_extension'])
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
