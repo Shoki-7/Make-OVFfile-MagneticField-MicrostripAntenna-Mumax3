@@ -6,6 +6,7 @@ from mpl_toolkits.axes_grid1 import Divider, Size
 from mpl_toolkits.axes_grid1.mpl_axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
 import tempfile
+from scipy.ndimage import affine_transform
 
 def calc_magnetic_field(xy_plane_arr, z_mesh, ant_width: float, ant_thickness: float, input_current: float, in_or_out_of_plane: bool):
 
@@ -20,7 +21,35 @@ def calc_magnetic_field(xy_plane_arr, z_mesh, ant_width: float, ant_thickness: f
 
     return B_pump
 
-def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, distance_between_antenna_and_sample: float, input_current: float, check=False, current_step=None):
+def get_nearest_index(list, num):
+    idx = np.abs(np.asarray(list) - num).argmin()
+    return idx
+
+def rotate_around_point(arr, angle, center):    
+    # degrees to radians
+    angle_rad = np.deg2rad(angle)
+    
+    cos_val = np.cos(angle_rad)
+    sin_val = np.sin(angle_rad)
+    
+    transform_matrix = np.array([
+        [cos_val, -sin_val],
+        [sin_val, cos_val]
+    ])
+    
+    offset = np.array(center) - np.dot(transform_matrix, center)
+    
+    rotated_arr = affine_transform(
+        arr,
+        transform_matrix,
+        offset=offset,
+        output_shape=arr.shape,
+        order=1
+    )
+    
+    return rotated_arr
+
+def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
     # size of cell
     size_cell_x = size_x / n_x
     size_cell_y = size_y / n_y
@@ -45,6 +74,11 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
         # Distance between x = ant_position and x_arr
         xy_plane_arr = x_mesh - ant_position
 
+    xy_plane_arr = y_mesh - ant_position_y
+
+    center_x_idx = get_nearest_index(x_arr, ant_position_x)
+    center_y_idx = get_nearest_index(y_arr, ant_position_y)
+
     # Initialize B_pump to store the values for each z point
     B_pump_x_list = []
     B_pump_y_list = []
@@ -61,7 +95,7 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
 
     plot_data = []
 
-    for i, z_value in enumerate(z_value_list):
+    for z_value in z_value_list:
         # cell center
         z_mesh = np.full_like(x_mesh, z_value)
 
@@ -73,25 +107,37 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
             B_pump_x_list.append(B_pump_x)
 
         elif input_current_direction == 'y':
-            B_pump_x = calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True)
+            B_pump_x = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_x_idx, center_y_idx)) * np.sin(np.deg2rad(current_direction))
+            if max(list(map(lambda x: max(x), abs(B_pump_x)))) < 1e-15:
+                B_pump_x = np.full_like(B_pump_x, 0.)
+            
             B_pump_x_list.append(B_pump_x)
 
-            B_pump_y = np.full_like(B_pump_x, 0.)
+            # B_pump_y = np.full_like(B_pump_x, 0.)
+            B_pump_y = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_x_idx, center_y_idx)) * np.cos(np.deg2rad(current_direction))
+            if max(list(map(lambda x: max(x), abs(B_pump_y)))) < 1e-15:
+                B_pump_y = np.full_like(B_pump_y, 0.)
             B_pump_y_list.append(B_pump_y)
 
+            # print(np.sin(np.deg2rad(current_direction)), np.cos(np.deg2rad(current_direction)))
 
-        B_pump_z = calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False)
+
+        B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_x_idx, center_y_idx))
+        if max(list(map(lambda x: max(x), abs(B_pump_z)))) < 1e-15:
+                B_pump_z = np.full_like(B_pump_z, 0.)
 
         B_pump_z_list.append(B_pump_z)
 
-        print("max(B_pump_x) [T] :", np.max(B_pump_x))
-        print("max(B_pump_y) [T] :", np.max(B_pump_y))
-        print("max(B_pump_z) [T] :", np.max(B_pump_z))
-        print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
+        # print("max(B_pump_x) [T] :", np.max(B_pump_x))
+        # print("max(B_pump_y) [T] :", np.max(B_pump_y))
+        # print("max(B_pump_z) [T] :", np.max(B_pump_z))
+        # print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
         
         if check:
             # plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
-            plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, i))
+            plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, current_step, current_direction))
+        
+        # print((center_x_idx, center_y_idx))
         
     if len(plot_data) != 0:
         return plot_data
@@ -100,12 +146,12 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
 
 def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
     
-    x_exp, x_unit = get_si_prefix(max(x_arr), "m")
-    y_exp, y_unit = get_si_prefix(max(y_arr), "m")
+    x_exp, x_unit = get_si_prefix(max(abs(x_arr)), "m")
+    y_exp, y_unit = get_si_prefix(max(abs(y_arr)), "m")
 
-    B_pump_x_exp, B_pump_x_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump_x))), "T")
-    B_pump_y_exp, B_pump_y_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump_y))), "T")
-    B_pump_z_exp, B_pump_z_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump_z))), "T")
+    B_pump_x_exp, B_pump_x_unit = get_si_prefix(max(list(map(lambda x: max(x), abs(B_pump_x)))), "T")
+    B_pump_y_exp, B_pump_y_unit = get_si_prefix(max(list(map(lambda x: max(x), abs(B_pump_y)))), "T")
+    B_pump_z_exp, B_pump_z_unit = get_si_prefix(max(list(map(lambda x: max(x), abs(B_pump_z)))), "T")
 
 
     plot_data = {
@@ -123,7 +169,20 @@ def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
 
     return plot_data
 
-def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z):
+def get_map_scale(arr, i, current_direction):
+    if i == 0:
+        z_min = min(list(map(lambda x: min(x), arr))) if np.sin(np.deg2rad(current_direction)) < 0 else 0
+        z_max = 0 if np.sin(np.deg2rad(current_direction)) < 0 else max(list(map(lambda x: max(x), arr)))
+    elif i == 1:
+        z_min = min(list(map(lambda x: min(x), arr))) if np.cos(np.deg2rad(current_direction)) < 0 else 0
+        z_max = 0 if np.cos(np.deg2rad(current_direction)) < 0 else max(list(map(lambda x: max(x), arr)))
+    elif i == 2:
+        z_min = min(list(map(lambda x: min(x), arr)))
+        z_max = max(list(map(lambda x: max(x), abs(arr))))
+    
+    return z_min, z_max
+
+def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z, current_direction):
     # color map
     cmap = gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
 
@@ -132,11 +191,11 @@ def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z):
     for i in range(3):
         ax = axes[i]
         cax = caxes[i]
-        x_exp, x_unit = get_si_prefix(max(x_arr), "m")
-        y_exp, y_unit = get_si_prefix(max(y_arr), "m")
+        x_exp, x_unit = get_si_prefix(max(abs(x_arr)), "m")
+        y_exp, y_unit = get_si_prefix(max(abs(y_arr)), "m")
         B_pump = [B_pump_x, B_pump_y, B_pump_z][i]
-        z_exp, z_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump))), "T")
-        z_min, z_max = 0 if i != 2 else min(list(map(lambda x: min(x), B_pump / (10**z_exp)))), max(list(map(lambda x: max(x), B_pump / (10**z_exp)))) if i != 2 else max(list(map(lambda x: max(x), abs(B_pump / (10**z_exp)))))
+        z_exp, z_unit = get_si_prefix(max(list(map(lambda x: max(x), abs(B_pump)))), "T")
+        z_min, z_max = get_map_scale(B_pump / (10**z_exp), i, current_direction)
         im = ax.pcolor(x_arr / (10**x_exp), y_arr / (10**y_exp), B_pump / (10**z_exp), cmap=cmap, rasterized=True, vmin=z_min, vmax=z_max)
         ax.locator_params(axis='x',nbins=10)
         ax.locator_params(axis='y',nbins=10)
@@ -164,10 +223,10 @@ def print_field_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
     for i in range(3):
         ax = axes[i]
         cax = caxes[i]
-        x_exp, x_unit = get_si_prefix(max(x_arr), "m")
-        y_exp, y_unit = get_si_prefix(max(y_arr), "m")
+        x_exp, x_unit = get_si_prefix(max(abs(x_arr)), "m")
+        y_exp, y_unit = get_si_prefix(max(abs(y_arr)), "m")
         B_pump = [B_pump_x, B_pump_y, B_pump_z][i]
-        z_exp, z_unit = get_si_prefix(max(list(map(lambda x: max(x), B_pump))), "T")
+        z_exp, z_unit = get_si_prefix(max(list(map(lambda x: max(x), abs(B_pump)))), "T")
         z_min, z_max = 0 if i != 2 else min(list(map(lambda x: min(x), B_pump / (10**z_exp)))), max(list(map(lambda x: max(x), B_pump / (10**z_exp)))) if i != 2 else max(list(map(lambda x: max(x), abs(B_pump / (10**z_exp)))))
         im = ax.pcolor(x_arr / (10**x_exp), y_arr / (10**y_exp), B_pump / (10**z_exp), cmap=cmap, rasterized=True, vmin=z_min, vmax=z_max)
         ax.locator_params(axis='x',nbins=10)
@@ -346,6 +405,8 @@ def get_si_prefix(value, unit):
     
     if value == 0:
         return si_exponent, unit
+    
+    # print(value)
     
     exponent = int('{:.0e}'.format(value).split('e')[1])
     si_exponent = 3 * (exponent // 3)

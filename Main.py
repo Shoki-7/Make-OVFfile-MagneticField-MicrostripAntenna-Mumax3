@@ -40,7 +40,7 @@ def add_si_prefix(value, unit):
     return f"{decimal_normalize(round(new_value, 3))}{si_prefix}{unit}"
 
 class CheckWindow(QDialog):
-    def __init__(self, image_paths, parent=None):
+    def __init__(self, image_paths, seved_path, append_str, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Check Plot')
         self.setGeometry(200, 200, 1100, 420)
@@ -74,18 +74,44 @@ class CheckWindow(QDialog):
         layout.addLayout(slider_layout)
         
         # Save path and button
-        save_layout = QHBoxLayout()
-        self.save_path = QLineEdit()
-        save_layout.addWidget(self.save_path)
+        save_layout = QVBoxLayout()
+        
+        # Path and browse button
+        path_layout = QHBoxLayout()
+        path_layout.addWidget(QLabel("Path:"))
+        self.save_path = QLineEdit(seved_path)
+        path_layout.addWidget(self.save_path)
+        self.browse_button = QPushButton("Browse")
+        self.browse_button.clicked.connect(self.browse_save_path)
+        path_layout.addWidget(self.browse_button)
+        save_layout.addLayout(path_layout)
+        
+        # Filename and extension
+        file_layout = QHBoxLayout()
+        file_layout.addWidget(QLabel("Output Filename:"))
+        self.save_filename = QLineEdit("PumpedField" + append_str)
+        file_layout.addWidget(self.save_filename)
+        self.save_extension = QComboBox()
+        self.save_extension.addItem(".png")
+        file_layout.addWidget(self.save_extension)
+        save_layout.addLayout(file_layout)
+        
+        # Save button
         self.save_button = QPushButton("Save")
         self.save_button.clicked.connect(self.save_plot)
         save_layout.addWidget(self.save_button)
+        
         layout.addLayout(save_layout)
         
         self.setLayout(layout)
         
         self.image_paths = image_paths
         self.update_plot()
+    
+    def browse_save_path(self):
+        dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
+        if dir_path:
+            self.save_path.setText(dir_path)
     
     def update_plot(self):
         z = self.slider.value()
@@ -103,11 +129,14 @@ class CheckWindow(QDialog):
     
     def save_plot(self):
         path = self.save_path.text()
-        if path:
+        filename = self.save_filename.text()
+        extension = self.save_extension.currentText()
+        if path and filename:
+            full_path = os.path.join(path, filename + extension)
             current_image = self.image_paths[self.slider.value()]
             pixmap = QPixmap(current_image)
-            pixmap.save(path)
-            print(f"Plot saved to {path}")
+            pixmap.save(full_path)
+            print(f"Plot saved to {full_path}")
 
     def closeEvent(self, event):
         # Delete temporary files when closing the window
@@ -118,7 +147,7 @@ class CheckWindow(QDialog):
                 pass
         super().closeEvent(event)
 
-class ModernUI(QWidget):
+class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
         self.initUI()
@@ -234,9 +263,20 @@ class ModernUI(QWidget):
         antenna_layout.addWidget(QLabel("Position (m):"), 0, 4)
         antenna_layout.addWidget(self.ant_position, 0, 5)
 
+        self.ant_position_x = QLineEdit("1250.3e-6")
+        self.ant_position_y = QLineEdit("12.8e-6")
+        antenna_layout.addWidget(QLabel("x (m):"), 1, 0)
+        antenna_layout.addWidget(self.ant_position_x, 1, 1)
+        antenna_layout.addWidget(QLabel("y (m):"), 1, 2)
+        antenna_layout.addWidget(self.ant_position_y, 1, 3)
+
         self.distance = QLineEdit("0.1e-9")  # Original: 0.1e-9
-        antenna_layout.addWidget(QLabel("Distance between antenna and sample (m):"), 1, 0, 1, 3)
-        antenna_layout.addWidget(self.distance, 1, 3, 1, 3)
+        antenna_layout.addWidget(QLabel("Distance between antenna and sample (m):"), 2, 0, 1, 3)
+        antenna_layout.addWidget(self.distance, 2, 3, 1, 3)
+
+        self.current_direction = QLineEdit("0")  # Original: 0.1e-9
+        antenna_layout.addWidget(QLabel("Current direction (degree):"), 3, 0, 1, 3)
+        antenna_layout.addWidget(self.current_direction, 3, 3, 1, 3)
 
         main_layout.addWidget(antenna_group)
 
@@ -438,24 +478,32 @@ class ModernUI(QWidget):
     def open_check_window(self):
         image_paths = self.calculate(True)
         if image_paths:
-            self.check_window = CheckWindow(image_paths, self)
+            self.check_window = CheckWindow(image_paths, self.dir_str.text(), "append", self)
             self.check_window.show()
-        self.progress_bar.hide()
 
     def browse_dir(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if dir_path:
             self.dir_str.setText(dir_path)
+    
+    def disable_inputs(self):
+        for widget in self.findChildren((QLineEdit, QPushButton, QComboBox, QCheckBox)):
+            widget.setEnabled(False)
+        self.progress_bar.show()
+
+    def enable_inputs(self):
+        for widget in self.findChildren((QLineEdit, QPushButton, QComboBox, QCheckBox)):
+            widget.setEnabled(True)
+        self.progress_bar.hide()
 
     def calculate(self, check):
+        self.disable_inputs()
         if self.save_conditions.isChecked():
             self.save_current_conditions()
         
-        self.progress_bar.show()
         self.progress_bar.setValue(0)
 
         # Here you would implement the calculation logic
-        print("Calculation triggered!")
         try:
             n_x = int(self.n_x.text())
             n_y = int(self.n_y.text())
@@ -467,6 +515,11 @@ class ModernUI(QWidget):
 
             input_current_direction = ['x', 'y'][1]
 
+            ant_position_x = float(self.ant_position_x.text())
+            ant_position_y = float(self.ant_position_y.text())
+
+            current_direction = float(self.current_direction.text())
+
             ant_width = float(self.ant_width.text())
             ant_thickness = float(self.ant_thickness.text())
             ant_position = float(self.ant_position.text())
@@ -476,20 +529,21 @@ class ModernUI(QWidget):
             input_current =  float(self.input_current.text())
 
             total_steps = n_z if check else 1
-            for step in range(total_steps):
-                if check:
+
+            if check:
+                result = []
+                for step in range(total_steps):
                     progress = int((step + 1) / total_steps * 100)
                     self.progress_bar.setValue(progress)
                     QApplication.processEvents()
-                    result = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, check, step)
-                    if step == 0:
+                    result.append(cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, ant_position_x, ant_position_y, distance_between_antenna_and_sample, current_direction, input_current, check, step)[0])
+                    if step == total_steps - 1:
                         image_paths = result
-                else:
-                    self.progress_bar.setValue(50)
-                    QApplication.processEvents()
-                    B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current)
+            else:
+                self.progress_bar.setValue(50)
+                QApplication.processEvents()
+                B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, ant_position_x, ant_position_y, distance_between_antenna_and_sample, current_direction, input_current)
 
-            if not check:
                 self.progress_bar.setValue(75)
                 QApplication.processEvents()
                 dir_path = self.dir_str.text()
@@ -502,14 +556,11 @@ class ModernUI(QWidget):
 
         except ValueError:
             print("Value error")
-            self.progress_bar.hide()
+            self.enable_inputs()
             return None if check else None
 
-        self.progress_bar.hide()
-        print(image_paths)
-        print(len(image_paths))
+        self.enable_inputs()
         return image_paths if check else None
-        
     
     def save_current_conditions(self):
         conditions = {
@@ -522,7 +573,10 @@ class ModernUI(QWidget):
             'ant_width': self.ant_width.text(),
             'ant_thickness': self.ant_thickness.text(),
             'ant_position': self.ant_position.text(),
+            'ant_position_x': self.ant_position_x.text(),
+            'ant_position_y': self.ant_position_y.text(),
             'distance': self.distance.text(),
+            'current_direction': self.current_direction.text(),
             'input_current': self.input_current.text(),
             'input_voltage': self.input_voltage.text(),
             'input_power_dBm': self.input_power_dBm.text(),
@@ -553,7 +607,10 @@ class ModernUI(QWidget):
             self.ant_width.setText(conditions['ant_width'])
             self.ant_thickness.setText(conditions['ant_thickness'])
             self.ant_position.setText(conditions['ant_position'])
+            self.ant_position_x.setText(conditions['ant_position_x'])
+            self.ant_position_y.setText(conditions['ant_position_y'])
             self.distance.setText(conditions['distance'])
+            self.current_direction.setText(conditions['current_direction'])
             self.input_current.setText(conditions['input_current'])
             self.input_voltage.setText(conditions['input_voltage'])
             self.input_power_dBm.setText(conditions['input_power_dBm'])
@@ -567,7 +624,7 @@ class ModernUI(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
-    ex = ModernUI()
+    ex = MainWindow()
     ex.show()
     sys.exit(app.exec_())
 
