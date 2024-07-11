@@ -49,6 +49,40 @@ def rotate_around_point(arr, angle, center):
     
     return rotated_arr
 
+def rotate_around_point_and_slice(arr, angle, center, sclice_len):
+    # degrees to radians
+    angle_rad = np.deg2rad(angle)
+    
+    cos_val = np.cos(angle_rad)
+    sin_val = np.sin(angle_rad)
+    
+    transform_matrix = np.array([
+        [cos_val, -sin_val],
+        [sin_val, cos_val]
+    ])
+    
+    offset = np.array(center) - np.dot(transform_matrix, center)
+    
+    rotated_arr = affine_transform(
+        arr,
+        transform_matrix,
+        offset=offset,
+        output_shape=arr.shape,
+        order=1
+    )
+    
+    center_x, center_y = np.array(rotated_arr.shape) // 2
+    half_sclice_len = np.array(sclice_len) // 2
+    
+    start_x = max(center_x - half_sclice_len[0], 0)
+    end_x = min(center_x + half_sclice_len[0], rotated_arr.shape[0])
+    start_y = max(center_y - half_sclice_len[1], 0)
+    end_y = min(center_y + half_sclice_len[1], rotated_arr.shape[1])
+    
+    center_rotated_arr = rotated_arr[start_x:end_x, start_y:end_y]
+    
+    return center_rotated_arr
+
 def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
     # size of cell
     size_cell_x = size_x / n_x
