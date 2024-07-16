@@ -26,7 +26,7 @@ def add_si_prefix(value, unit):
     }
     
     if value == 0:
-        return f"{value} {unit}"
+        return f"{value}{unit}"
     
     exponent = int('{:.0e}'.format(value).split('e')[1])
     si_exponent = 3 * (exponent // 3)
@@ -341,6 +341,7 @@ class MainWindow(QWidget):
         self.output_extension = QComboBox()
         self.output_extension.addItem(".ovf")
         self.output_extension.addItem(".txt")
+        self.append_filename = QLineEdit()
         self.save_conditions = QCheckBox("Save conditions")
         self.load_button = QPushButton("Load", clicked=self.load_conditions)
         
@@ -348,12 +349,16 @@ class MainWindow(QWidget):
         output_layout.addWidget(self.dir_str, 0, 1)
         output_layout.addWidget(QPushButton("Browse", clicked=self.browse_dir), 0, 2)
         output_layout.addWidget(QLabel("Output Filename:"), 1, 0)
-        output_layout.addWidget(self.output_filename, 1, 1)
-        output_layout.addWidget(self.output_extension, 1, 2)
-        output_layout.addWidget(self.save_conditions, 2, 0)
-        output_layout.addWidget(self.load_button, 2, 2)
+        output_layout.addWidget(self.output_filename, 1, 1, 1, 2)
+        output_layout.addWidget(QLabel("Append Filename:"), 2, 0)
+        output_layout.addWidget(self.append_filename, 2, 1)
+        output_layout.addWidget(self.output_extension, 2, 2)
+        output_layout.addWidget(self.save_conditions, 3, 0)
+        output_layout.addWidget(self.load_button, 3, 2)
 
         main_layout.addWidget(output_group)
+
+        self.append_filename.editingFinished.connect(lambda: self.update_append_text())
 
         # Add check and calculate buttons in a horizontal layout
         button_layout = QHBoxLayout()
@@ -467,9 +472,37 @@ class MainWindow(QWidget):
 
             self.input_current.setText(f"{current:.6e}")
             self.input_voltage.setText(f"{voltage:.6e}")
-            self.input_power_dBm.setText(f"{power_dBm:.6}")
+            self.input_power_dBm.setText(f"{power_dBm:.6f}")
             self.input_power_W.setText(f"{power_W:.6e}")
-            self.impedance.setText(f"{impedance:.6}")                
+            self.impedance.setText(f"{impedance:.6f}")                
+
+        except ValueError:
+            # If conversion fails, don't update the sizes
+            pass
+    
+    def update_append_text(self):
+        try:
+            n_x = self.n_x.text() if self.n_x.text() else 0
+            n_y = self.n_y.text() if self.n_y.text() else 0
+            n_z = self.n_z.text() if self.n_z.text() else 0
+            n_str = f"{n_x}x{n_y}x{n_z}cells"
+
+            size_x = float(self.size_x.text()) if self.size_x.text() else 0
+            size_y = float(self.size_y.text()) if self.size_y.text() else 0
+            size_z = float(self.size_z.text()) if self.size_z.text() else 0
+            size_str = f"{add_si_prefix(size_x, 'm')}x{add_si_prefix(size_y, 'm')}x{add_si_prefix(size_z, 'm')}"
+
+            ant_width = float(self.ant_width.text()) if self.size_z.text() else 0
+            ant_position_x = float(self.ant_position_x.text()) if self.ant_position_x.text() else 0
+            ant_position_y = float(self.ant_position_y.text()) if self.ant_position_y.text() else 0
+            distance = float(self.distance.text()) if self.distance.text() else 0
+            current_direction = float(self.current_direction.text()) if self.current_direction.text() else 0
+            input_current = float(self.input_current.text()) if self.input_current.text() else 0
+            antenna_str = f"t{add_si_prefix(ant_width, 'm')}_x{add_si_prefix(ant_position_x, 'm')}_y{add_si_prefix(ant_position_y, 'm')}_s2a{add_si_prefix(distance, 'm')}_{add_si_prefix(current_direction, 'deg')}_I{add_si_prefix(input_current, 'A')}"
+
+            self.append_filename.setText(f"{n_str}_{size_str}_{antenna_str}")
+
+            # print(n_str, size_str)
 
         except ValueError:
             # If conversion fails, don't update the sizes
@@ -536,7 +569,7 @@ class MainWindow(QWidget):
                     progress = int((step + 1) / total_steps * 100)
                     self.progress_bar.setValue(progress)
                     QApplication.processEvents()
-                    result.append(cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, ant_position_x, ant_position_y, distance_between_antenna_and_sample, current_direction, input_current, check, step)[0])
+                    result.append(cf.get_magnetic_field_1(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, ant_position_x, ant_position_y, distance_between_antenna_and_sample, current_direction, input_current, check, step)[0])
                     if step == total_steps - 1:
                         image_paths = result
             else:

@@ -7,6 +7,7 @@ from mpl_toolkits.axes_grid1.mpl_axes import Axes
 from matplotlib.colors import LinearSegmentedColormap
 import tempfile
 from scipy.ndimage import affine_transform
+from scipy.interpolate import RegularGridInterpolator
 
 def calc_magnetic_field(xy_plane_arr, z_mesh, ant_width: float, ant_thickness: float, input_current: float, in_or_out_of_plane: bool):
 
@@ -18,14 +19,14 @@ def calc_magnetic_field(xy_plane_arr, z_mesh, ant_width: float, ant_thickness: f
         B_pump = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (xy_plane_arr+ant_half_width)/2 * np.log( ((xy_plane_arr+ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr+ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) - (xy_plane_arr-ant_half_width)/2*np.log( ((xy_plane_arr-ant_half_width)**2+(z_mesh+ant_half_thickness)**2)/((xy_plane_arr-ant_half_width)**2+(z_mesh-ant_half_thickness)**2) ) + (z_mesh+ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh+ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh+ant_half_thickness)) ) - (z_mesh-ant_half_thickness)*( np.arctan((xy_plane_arr+ant_half_width)/(z_mesh-ant_half_thickness)) - np.arctan((xy_plane_arr-ant_half_width)/(z_mesh-ant_half_thickness)) ) )
     else:
         B_pump = 4*np.pi*1e-7 * input_current/(8*np.pi*ant_half_width*ant_half_thickness)*( (z_mesh+ant_half_thickness)/2 * np.log( ((z_mesh+ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh+ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) - (z_mesh-ant_half_thickness)/2*np.log( ((z_mesh-ant_half_thickness)**2+(xy_plane_arr+ant_half_width)**2)/((z_mesh-ant_half_thickness)**2+(xy_plane_arr-ant_half_width)**2) ) + (xy_plane_arr+ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr+ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr+ant_half_width)) ) - (xy_plane_arr-ant_half_width)*( np.arctan((z_mesh+ant_half_thickness)/(xy_plane_arr-ant_half_width)) - np.arctan((z_mesh-ant_half_thickness)/(xy_plane_arr-ant_half_width)) ) )
-
+    
     return B_pump
 
 def get_nearest_index(list, num):
     idx = np.abs(np.asarray(list) - num).argmin()
     return idx
 
-def rotate_around_point(arr, angle, center):    
+def rotate_around_point(arr, angle, center, sclice_len=None):    
     # degrees to radians
     angle_rad = np.deg2rad(angle)
     
@@ -46,56 +47,62 @@ def rotate_around_point(arr, angle, center):
         output_shape=arr.shape,
         order=1
     )
+
+    if sclice_len is not None:
+        center_x, center_y = np.array(rotated_arr.shape) // 2
+        half_sclice_len = np.array(sclice_len) // 2
+        
+        start_x = max(center_x - half_sclice_len[0], 0)
+        end_x = min(center_x + half_sclice_len[0], rotated_arr.shape[0])
+        start_y = max(center_y - half_sclice_len[1], 0)
+        end_y = min(center_y + half_sclice_len[1], rotated_arr.shape[1])
+        
+        center_rotated_arr = rotated_arr[start_x:end_x, start_y:end_y]
+        
+        return center_rotated_arr
+
     
     return rotated_arr
 
-def rotate_around_point_and_slice(arr, angle, center, sclice_len):
-    # degrees to radians
-    angle_rad = np.deg2rad(angle)
+def resize_2d_array_interpolate(arr, new_x, new_y):
+    original_x, original_y = arr.shape
     
-    cos_val = np.cos(angle_rad)
-    sin_val = np.sin(angle_rad)
+    x = np.arange(original_x)
+    y = np.arange(original_y)
     
-    transform_matrix = np.array([
-        [cos_val, -sin_val],
-        [sin_val, cos_val]
-    ])
+    new_x_vals = np.linspace(0, original_x - 1, new_x)
+    new_y_vals = np.linspace(0, original_y - 1, new_y)
     
-    offset = np.array(center) - np.dot(transform_matrix, center)
+    interp_func = RegularGridInterpolator((x, y), arr)
     
-    rotated_arr = affine_transform(
-        arr,
-        transform_matrix,
-        offset=offset,
-        output_shape=arr.shape,
-        order=1
-    )
+    new_grid_x, new_grid_y = np.meshgrid(new_x_vals, new_y_vals, indexing='ij')
+    new_points = np.array([new_grid_x.ravel(), new_grid_y.ravel()]).T
     
-    center_x, center_y = np.array(rotated_arr.shape) // 2
-    half_sclice_len = np.array(sclice_len) // 2
+    new_arr = interp_func(new_points).reshape(new_x, new_y)
     
-    start_x = max(center_x - half_sclice_len[0], 0)
-    end_x = min(center_x + half_sclice_len[0], rotated_arr.shape[0])
-    start_y = max(center_y - half_sclice_len[1], 0)
-    end_y = min(center_y + half_sclice_len[1], rotated_arr.shape[1])
-    
-    center_rotated_arr = rotated_arr[start_x:end_x, start_y:end_y]
-    
-    return center_rotated_arr
+    return new_arr
 
-def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
+def get_magnetic_field_1(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
     # size of cell
     size_cell_x = size_x / n_x
     size_cell_y = size_y / n_y
     size_cell_z = size_z / n_z
 
-    # Generate 1D arrays for the x, y, and z directions
     x_arr = np.linspace(size_cell_x / 2, size_x - size_cell_x / 2, n_x)
     y_arr = np.linspace(size_cell_y / 2, size_y - size_cell_y / 2, n_y)
     z_arr = np.linspace(size_cell_z / 2, size_z - size_cell_z / 2, n_z)
 
-    # Create xy plane mesh grid
-    x_mesh, y_mesh = np.meshgrid(x_arr, y_arr)
+    size_cell = size_cell_x if size_cell_x < size_cell_y else size_cell_y
+    size_xy = size_x if size_x > size_y else size_y
+    n_xy = int(size_xy // size_cell)
+
+    xy_arr = np.linspace(size_cell / 2, size_xy - size_cell / 2, n_xy)
+
+    wide_xy_const = 2
+    wide_xy_arr = np.linspace(- size_xy * (wide_xy_const - 1) + size_cell / 2, size_xy * wide_xy_const - size_cell / 2, n_xy * (1 + (wide_xy_const - 1) * 2))
+
+    x_mesh, y_mesh = np.meshgrid(xy_arr, xy_arr)
+    wide_x_mesh, wide_y_mesh = np.meshgrid(wide_xy_arr, wide_xy_arr)
 
     ant_half_width = ant_width / 2
     ant_half_thickness = ant_thickness / 2
@@ -108,10 +115,19 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
         # Distance between x = ant_position and x_arr
         xy_plane_arr = x_mesh - ant_position
 
-    xy_plane_arr = y_mesh - ant_position_y
+    # xy_plane_arr = y_mesh - ant_position_y
+    xy_plane_arr = wide_y_mesh - ant_position_y
 
-    center_x_idx = get_nearest_index(x_arr, ant_position_x)
-    center_y_idx = get_nearest_index(y_arr, ant_position_y)
+    # center_x_idx = get_nearest_index(x_arr, ant_position_x)
+    # center_y_idx = get_nearest_index(y_arr, ant_position_y)
+
+    center_x_idx = get_nearest_index(wide_xy_arr, ant_position_x)
+    center_y_idx = get_nearest_index(wide_xy_arr, ant_position_y)
+
+    sample_x_idx_begin = get_nearest_index(wide_xy_arr, x_arr[0])
+    sample_x_idx_end = get_nearest_index(wide_xy_arr, x_arr[-1])
+    sample_y_idx_begin = get_nearest_index(wide_xy_arr, y_arr[0])
+    sample_y_idx_end = get_nearest_index(wide_xy_arr, y_arr[-1])
 
     # Initialize B_pump to store the values for each z point
     B_pump_x_list = []
@@ -131,7 +147,7 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
 
     for z_value in z_value_list:
         # cell center
-        z_mesh = np.full_like(x_mesh, z_value)
+        z_mesh = np.full_like(wide_y_mesh, z_value)
 
         if input_current_direction == 'x':
             B_pump_y = calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True)
@@ -141,14 +157,18 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
             B_pump_x_list.append(B_pump_x)
 
         elif input_current_direction == 'y':
-            B_pump_x = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_x_idx, center_y_idx)) * np.sin(np.deg2rad(current_direction))
+            B_pump_x = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.sin(np.deg2rad(current_direction) * (-1))
+            B_pump_x = resize_2d_array_interpolate(B_pump_x[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
             if max(list(map(lambda x: max(x), abs(B_pump_x)))) < 1e-15:
                 B_pump_x = np.full_like(B_pump_x, 0.)
+
+            # print(np.shape(B_pump_x))
             
             B_pump_x_list.append(B_pump_x)
 
             # B_pump_y = np.full_like(B_pump_x, 0.)
-            B_pump_y = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_x_idx, center_y_idx)) * np.cos(np.deg2rad(current_direction))
+            B_pump_y = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.cos(np.deg2rad(current_direction))
+            B_pump_y = resize_2d_array_interpolate(B_pump_y[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
             if max(list(map(lambda x: max(x), abs(B_pump_y)))) < 1e-15:
                 B_pump_y = np.full_like(B_pump_y, 0.)
             B_pump_y_list.append(B_pump_y)
@@ -156,7 +176,128 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
             # print(np.sin(np.deg2rad(current_direction)), np.cos(np.deg2rad(current_direction)))
 
 
-        B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_x_idx, center_y_idx))
+        B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_y_idx, center_x_idx))
+        B_pump_z = resize_2d_array_interpolate(B_pump_z[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
+        if max(list(map(lambda x: max(x), abs(B_pump_z)))) < 1e-15:
+                B_pump_z = np.full_like(B_pump_z, 0.)
+
+        B_pump_z_list.append(B_pump_z)
+
+        # print("max(B_pump_x) [T] :", np.max(B_pump_x))
+        # print("max(B_pump_y) [T] :", np.max(B_pump_y))
+        # print("max(B_pump_z) [T] :", np.max(B_pump_z))
+        # print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
+        
+        if check:
+            # plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
+            plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, current_step, current_direction))
+        
+        # print((center_x_idx, center_y_idx))
+        
+    if len(plot_data) != 0:
+        return plot_data
+    
+    return B_pump_x_list, B_pump_y_list, B_pump_z_list
+
+def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
+    # size of cell
+    size_cell_x = size_x / n_x
+    size_cell_y = size_y / n_y
+    size_cell_z = size_z / n_z
+
+    # セルサイズを比較、小さいほうを基準として、サイズの大きいほうをarrにする。
+    # 計算を行った後、配列を調節する。
+
+    # Generate 1D arrays for the x, y, and z directions
+    x_arr = np.linspace(size_cell_x / 2, size_x - size_cell_x / 2, n_x)
+    y_arr = np.linspace(size_cell_y / 2, size_y - size_cell_y / 2, n_y)
+    z_arr = np.linspace(size_cell_z / 2, size_z - size_cell_z / 2, n_z)
+
+    # 大きいサイズに対して3
+    # 小さいサイズは同程度のセルサイズ
+    wide_x_const = 1
+    wide_y_const = 1
+    wide_x_arr = np.linspace(- size_x * (wide_x_const - 1) + size_cell_x / 2, size_x * wide_x_const - size_cell_x / 2, n_x * (1 + (wide_x_const - 1) * 2))
+    wide_y_arr = np.linspace(- size_y * (wide_y_const - 1) + size_cell_y / 2, size_y * wide_y_const - size_cell_y / 2, n_y * (1 + (wide_y_const - 1) * 2))
+
+    # Create xy plane mesh grid
+    x_mesh, y_mesh = np.meshgrid(x_arr, y_arr)
+    wide_x_mesh, wide_y_mesh = np.meshgrid(wide_x_arr, wide_y_arr)
+
+    ant_half_width = ant_width / 2
+    ant_half_thickness = ant_thickness / 2
+
+    # Create the xy plane array based on the input current direction
+    if input_current_direction == 'x':
+        # Distance between y = ant_position and y_arr
+        xy_plane_arr = y_mesh - ant_position
+    else:
+        # Distance between x = ant_position and x_arr
+        xy_plane_arr = x_mesh - ant_position
+
+    # xy_plane_arr = y_mesh - ant_position_y
+    xy_plane_arr = wide_y_mesh - ant_position_y
+
+    # center_x_idx = get_nearest_index(x_arr, ant_position_x)
+    # center_y_idx = get_nearest_index(y_arr, ant_position_y)
+
+    center_x_idx = get_nearest_index(wide_x_arr, ant_position_x)
+    center_y_idx = get_nearest_index(wide_y_arr, ant_position_y)
+
+    sample_x_idx_begin = int((wide_x_const - 1) * n_x)
+    sample_x_idx_end = int(wide_x_const * n_x)
+    sample_y_idx_begin = int((wide_y_const - 1) * n_y)
+    sample_y_idx_end = int(wide_y_const * n_y)
+
+    # Initialize B_pump to store the values for each z point
+    B_pump_x_list = []
+    B_pump_y_list = []
+    B_pump_z_list = []
+
+    if check:
+        # Only process the current_step when checking
+        z_range = range(current_step, current_step + 1)
+    else:
+        z_range = range(n_z)
+
+    # depth between center of antenna thickness
+    z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in z_range]
+
+    plot_data = []
+
+    for z_value in z_value_list:
+        # cell center
+        z_mesh = np.full_like(wide_y_mesh, z_value)
+
+        if input_current_direction == 'x':
+            B_pump_y = calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True)
+            B_pump_y_list.append(B_pump_y)
+
+            B_pump_x = np.full_like(B_pump_y, 0.)
+            B_pump_x_list.append(B_pump_x)
+
+        elif input_current_direction == 'y':
+            B_pump_x = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.sin(np.deg2rad(current_direction) * (-1))
+            B_pump_x = B_pump_x[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end]
+            if max(list(map(lambda x: max(x), abs(B_pump_x)))) < 1e-15:
+                B_pump_x = np.full_like(B_pump_x, 0.)
+
+            # print(np.shape(B_pump_x))
+            
+            B_pump_x_list.append(B_pump_x)
+
+            # B_pump_y = np.full_like(B_pump_x, 0.)
+            B_pump_y = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.cos(np.deg2rad(current_direction))
+            B_pump_y = B_pump_y[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end]
+            if max(list(map(lambda x: max(x), abs(B_pump_y)))) < 1e-15:
+                B_pump_y = np.full_like(B_pump_y, 0.)
+            B_pump_y_list.append(B_pump_y)
+
+            # print(np.sin(np.deg2rad(current_direction)), np.cos(np.deg2rad(current_direction)))
+
+
+        B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_y_idx, center_x_idx))
+        B_pump_z = B_pump_z[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end]
         if max(list(map(lambda x: max(x), abs(B_pump_z)))) < 1e-15:
                 B_pump_z = np.full_like(B_pump_z, 0.)
 
@@ -205,8 +346,8 @@ def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
 
 def get_map_scale(arr, i, current_direction):
     if i == 0:
-        z_min = min(list(map(lambda x: min(x), arr))) if np.sin(np.deg2rad(current_direction)) < 0 else 0
-        z_max = 0 if np.sin(np.deg2rad(current_direction)) < 0 else max(list(map(lambda x: max(x), arr)))
+        z_min = min(list(map(lambda x: min(x), arr))) if np.sin(np.deg2rad(current_direction)) * (-1) < 0 else 0
+        z_max = 0 if np.sin(np.deg2rad(current_direction)) * (-1) < 0 else max(list(map(lambda x: max(x), arr)))
     elif i == 1:
         z_min = min(list(map(lambda x: min(x), arr))) if np.cos(np.deg2rad(current_direction)) < 0 else 0
         z_max = 0 if np.cos(np.deg2rad(current_direction)) < 0 else max(list(map(lambda x: max(x), arr)))
@@ -221,6 +362,11 @@ def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z, current
     cmap = gen_cmap_rgb([(0,0,0.5),(0,0,1),(0,1,1),(0,1,0),(1,1,0),(1,0.5,0),(1,0,0)])
 
     plt, fig, axes, caxes, shrink = figure_size_setting(3)
+
+    B_pump_max = max(list(map(lambda x: max(x), np.sqrt(B_pump_x ** 2 + B_pump_y ** 2 + B_pump_z ** 2))))
+    B_pump_max_exp, B_pump_max_unit = get_si_prefix(B_pump_max, "T")
+
+    fig.suptitle(f"Z-slice: {z}, max(Bpump) = {B_pump_max / (10 ** B_pump_max_exp):.2f} {B_pump_max_unit}")
 
     for i in range(3):
         ax = axes[i]
@@ -240,7 +386,9 @@ def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z, current
         ax.set_xlabel(f'x ({x_unit})', labelpad=0, fontsize=7)      #x-axis label
         ax.set_ylabel(f'y ({y_unit})', labelpad=1, fontsize=7)      #y-axis label
 
-        ax.set_title(f"Z-slice: {z}")
+        field = ["Bx", "By", "Bz"][i]
+
+        ax.set_title(f"{field}: max(|{field}|) = {max(list(map(lambda x: max(x), abs(B_pump))))  / (10**z_exp):.2f} {z_unit}")
     
     with tempfile.NamedTemporaryFile(delete=False, suffix='.png') as tmp:
         plt.savefig(tmp.name)
