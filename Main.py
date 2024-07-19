@@ -416,31 +416,7 @@ class MainWindow(QWidget):
         self.progress_bar.hide()
         main_layout.addWidget(self.progress_bar)
 
-        # Footer
-        footer_widget = QWidget()
-        footer_layout = QHBoxLayout(footer_widget)
-        footer_layout.setContentsMargins(0, 0, 0, 0)
-
-        version_label = QLabel("v1.0")
-        version_label.setStyleSheet(f"color: {FOOTER_FONT_COLOR}; font-size: {footer_font_size};")
-
-        copyright_label = QLabel("© Shoki Nezu")
-        copyright_label.setStyleSheet(f"color: {FOOTER_FONT_COLOR}; font-size: {footer_font_size};")
-
-        footer_layout.addWidget(version_label)
-        footer_layout.addStretch()
-        footer_layout.addWidget(copyright_label)
-
-        footer_widget.setFixedHeight(int(12 * scale_factor))
-
-        footer_widget.setStyleSheet(f"""
-            QWidget {{
-                background-color: {BACKGROUND_COLOR};
-                border-top: none;
-            }}
-        """)
-
-        main_layout.addWidget(footer_widget)
+        
 
         self.setLayout(main_layout)
 
