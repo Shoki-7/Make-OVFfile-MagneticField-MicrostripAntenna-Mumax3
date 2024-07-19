@@ -416,7 +416,7 @@ class MainWindow(QWidget):
         self.progress_bar.hide()
         main_layout.addWidget(self.progress_bar)
 
-        
+
 
         self.setLayout(main_layout)
 
@@ -804,7 +804,7 @@ class MainWindow(QWidget):
                 self.progress_bar.setValue(75)
                 QApplication.processEvents()
                 dir_path = self.dir_str.text()
-                output_filename = self.output_filename.text() + self.output_extension.currentText()
+                output_filename = self.output_filename.text() + "_" + self.append_filename.text() + self.output_extension.currentText()
                 output_path = os.path.join(dir_path, output_filename)
                 oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
 
