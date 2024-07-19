@@ -82,7 +82,7 @@ def resize_2d_array_interpolate(arr, new_x, new_y):
     
     return new_arr
 
-def get_magnetic_field_1(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
+def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, ant_dicts, check=False, current_step=None):
     # size of cell
     size_cell_x = size_x / n_x
     size_cell_y = size_y / n_y
@@ -101,62 +101,57 @@ def get_magnetic_field_1(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int,
     wide_xy_const = 2
     wide_xy_arr = np.linspace(- size_xy * (wide_xy_const - 1) + size_cell / 2, size_xy * wide_xy_const - size_cell / 2, n_xy * (1 + (wide_xy_const - 1) * 2))
 
-    x_mesh, y_mesh = np.meshgrid(xy_arr, xy_arr)
-    wide_x_mesh, wide_y_mesh = np.meshgrid(wide_xy_arr, wide_xy_arr)
+    # x_mesh, y_mesh = np.meshgrid(xy_arr, xy_arr)
+    # wide_x_mesh, wide_y_mesh = np.meshgrid(wide_xy_arr, wide_xy_arr)
 
-    ant_half_width = ant_width / 2
-    ant_half_thickness = ant_thickness / 2
-
-    # Create the xy plane array based on the input current direction
-    if input_current_direction == 'x':
-        # Distance between y = ant_position and y_arr
-        xy_plane_arr = y_mesh - ant_position
-    else:
-        # Distance between x = ant_position and x_arr
-        xy_plane_arr = x_mesh - ant_position
-
-    # xy_plane_arr = y_mesh - ant_position_y
-    xy_plane_arr = wide_y_mesh - ant_position_y
-
-    # center_x_idx = get_nearest_index(x_arr, ant_position_x)
-    # center_y_idx = get_nearest_index(y_arr, ant_position_y)
-
-    center_x_idx = get_nearest_index(wide_xy_arr, ant_position_x)
-    center_y_idx = get_nearest_index(wide_xy_arr, ant_position_y)
-
-    sample_x_idx_begin = get_nearest_index(wide_xy_arr, x_arr[0])
-    sample_x_idx_end = get_nearest_index(wide_xy_arr, x_arr[-1])
-    sample_y_idx_begin = get_nearest_index(wide_xy_arr, y_arr[0])
-    sample_y_idx_end = get_nearest_index(wide_xy_arr, y_arr[-1])
+    _, wide_y_mesh = np.meshgrid(wide_xy_arr, wide_xy_arr)
 
     # Initialize B_pump to store the values for each z point
     B_pump_x_list = []
     B_pump_y_list = []
     B_pump_z_list = []
 
-    if check:
-        # Only process the current_step when checking
-        z_range = range(current_step, current_step + 1)
-    else:
-        z_range = range(n_z)
-
-    # depth between center of antenna thickness
-    z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in z_range]
-
     plot_data = []
 
-    for z_value in z_value_list:
-        # cell center
-        z_mesh = np.full_like(wide_y_mesh, z_value)
+    for i, ant_dict in enumerate(ant_dicts):
+        ant_width = ant_dict['ant_width']
+        # ant_half_width = ant_width / 2
+        ant_thickness = ant_dict['ant_thickness']
+        ant_half_thickness = ant_thickness / 2
 
-        if input_current_direction == 'x':
-            B_pump_y = calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True)
-            B_pump_y_list.append(B_pump_y)
+        ant_position_x = ant_dict['ant_position_x']
+        ant_position_y = ant_dict['ant_position_y']
+        # xy_plane_arr = y_mesh - ant_position_y
+        xy_plane_arr = wide_y_mesh - ant_position_y
 
-            B_pump_x = np.full_like(B_pump_y, 0.)
-            B_pump_x_list.append(B_pump_x)
+        center_x_idx = get_nearest_index(wide_xy_arr, ant_position_x)
+        center_y_idx = get_nearest_index(wide_xy_arr, ant_position_y)
 
-        elif input_current_direction == 'y':
+        center_x_idx = get_nearest_index(wide_xy_arr, ant_position_x)
+        center_y_idx = get_nearest_index(wide_xy_arr, ant_position_y)
+
+        sample_x_idx_begin = get_nearest_index(wide_xy_arr, x_arr[0])
+        sample_x_idx_end = get_nearest_index(wide_xy_arr, x_arr[-1])
+        sample_y_idx_begin = get_nearest_index(wide_xy_arr, y_arr[0])
+        sample_y_idx_end = get_nearest_index(wide_xy_arr, y_arr[-1])
+
+        if check:
+            # Only process the current_step when checking
+            z_range = range(current_step, current_step + 1)
+        else:
+            z_range = range(n_z)
+        
+        # depth between center of antenna thickness
+        distance_between_antenna_and_sample = ant_dict['distance']
+        z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in z_range]
+
+        input_current = ant_dict['input_current']
+        current_direction = ant_dict['current_direction']
+
+        for z, z_value in enumerate(z_value_list):
+            # cell center
+            z_mesh = np.full_like(wide_y_mesh, z_value)
+
             B_pump_x = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.sin(np.deg2rad(current_direction) * (-1))
             B_pump_x = resize_2d_array_interpolate(B_pump_x[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
             if max(list(map(lambda x: max(x), abs(B_pump_x)))) < 1e-15:
@@ -164,160 +159,52 @@ def get_magnetic_field_1(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int,
 
             # print(np.shape(B_pump_x))
             
-            B_pump_x_list.append(B_pump_x)
+            if i == 0:
+                B_pump_x_list.append(B_pump_x)
+            else:
+                B_pump_x_list[z] += B_pump_x
 
             # B_pump_y = np.full_like(B_pump_x, 0.)
             B_pump_y = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.cos(np.deg2rad(current_direction))
             B_pump_y = resize_2d_array_interpolate(B_pump_y[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
             if max(list(map(lambda x: max(x), abs(B_pump_y)))) < 1e-15:
                 B_pump_y = np.full_like(B_pump_y, 0.)
-            B_pump_y_list.append(B_pump_y)
+
+            if i == 0:
+                B_pump_y_list.append(B_pump_y)
+            else:
+                B_pump_y_list[z] += B_pump_y
 
             # print(np.sin(np.deg2rad(current_direction)), np.cos(np.deg2rad(current_direction)))
 
 
-        B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_y_idx, center_x_idx))
-        B_pump_z = resize_2d_array_interpolate(B_pump_z[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
-        if max(list(map(lambda x: max(x), abs(B_pump_z)))) < 1e-15:
-                B_pump_z = np.full_like(B_pump_z, 0.)
+            B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_y_idx, center_x_idx))
+            B_pump_z = resize_2d_array_interpolate(B_pump_z[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end], n_y, n_x)
+            if max(list(map(lambda x: max(x), abs(B_pump_z)))) < 1e-15:
+                    B_pump_z = np.full_like(B_pump_z, 0.)
 
-        B_pump_z_list.append(B_pump_z)
+            if i == 0:
+                B_pump_z_list.append(B_pump_z)
+            else:
+                B_pump_z_list[z] += B_pump_z
 
-        # print("max(B_pump_x) [T] :", np.max(B_pump_x))
-        # print("max(B_pump_y) [T] :", np.max(B_pump_y))
-        # print("max(B_pump_z) [T] :", np.max(B_pump_z))
-        # print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
-        
-        if check:
-            # plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
-            plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, current_step, current_direction))
-        
-        # print((center_x_idx, center_y_idx))
-        
-    if len(plot_data) != 0:
-        return plot_data
+            # print("max(B_pump_x) [T] :", np.max(B_pump_x))
+            # print("max(B_pump_y) [T] :", np.max(B_pump_y))
+            # print("max(B_pump_z) [T] :", np.max(B_pump_z))
+            # print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
+
+            # print((center_x_idx, center_y_idx))
     
-    return B_pump_x_list, B_pump_y_list, B_pump_z_list
-
-def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, size_z: int, input_current_direction:str, ant_width: float, ant_thickness: float, ant_position: float, ant_position_x: float, ant_position_y: float, distance_between_antenna_and_sample: float, current_direction: float, input_current: float, check=False, current_step=None):
-    # size of cell
-    size_cell_x = size_x / n_x
-    size_cell_y = size_y / n_y
-    size_cell_z = size_z / n_z
-
-    # セルサイズを比較、小さいほうを基準として、サイズの大きいほうをarrにする。
-    # 計算を行った後、配列を調節する。
-
-    # Generate 1D arrays for the x, y, and z directions
-    x_arr = np.linspace(size_cell_x / 2, size_x - size_cell_x / 2, n_x)
-    y_arr = np.linspace(size_cell_y / 2, size_y - size_cell_y / 2, n_y)
-    z_arr = np.linspace(size_cell_z / 2, size_z - size_cell_z / 2, n_z)
-
-    # 大きいサイズに対して3
-    # 小さいサイズは同程度のセルサイズ
-    wide_x_const = 1
-    wide_y_const = 1
-    wide_x_arr = np.linspace(- size_x * (wide_x_const - 1) + size_cell_x / 2, size_x * wide_x_const - size_cell_x / 2, n_x * (1 + (wide_x_const - 1) * 2))
-    wide_y_arr = np.linspace(- size_y * (wide_y_const - 1) + size_cell_y / 2, size_y * wide_y_const - size_cell_y / 2, n_y * (1 + (wide_y_const - 1) * 2))
-
-    # Create xy plane mesh grid
-    x_mesh, y_mesh = np.meshgrid(x_arr, y_arr)
-    wide_x_mesh, wide_y_mesh = np.meshgrid(wide_x_arr, wide_y_arr)
-
-    ant_half_width = ant_width / 2
-    ant_half_thickness = ant_thickness / 2
-
-    # Create the xy plane array based on the input current direction
-    if input_current_direction == 'x':
-        # Distance between y = ant_position and y_arr
-        xy_plane_arr = y_mesh - ant_position
-    else:
-        # Distance between x = ant_position and x_arr
-        xy_plane_arr = x_mesh - ant_position
-
-    # xy_plane_arr = y_mesh - ant_position_y
-    xy_plane_arr = wide_y_mesh - ant_position_y
-
-    # center_x_idx = get_nearest_index(x_arr, ant_position_x)
-    # center_y_idx = get_nearest_index(y_arr, ant_position_y)
-
-    center_x_idx = get_nearest_index(wide_x_arr, ant_position_x)
-    center_y_idx = get_nearest_index(wide_y_arr, ant_position_y)
-
-    sample_x_idx_begin = int((wide_x_const - 1) * n_x)
-    sample_x_idx_end = int(wide_x_const * n_x)
-    sample_y_idx_begin = int((wide_y_const - 1) * n_y)
-    sample_y_idx_end = int(wide_y_const * n_y)
-
-    # Initialize B_pump to store the values for each z point
-    B_pump_x_list = []
-    B_pump_y_list = []
-    B_pump_z_list = []
-
     if check:
-        # Only process the current_step when checking
-        z_range = range(current_step, current_step + 1)
-    else:
-        z_range = range(n_z)
-
-    # depth between center of antenna thickness
-    z_value_list = [ant_half_thickness + distance_between_antenna_and_sample + z_arr[z_pnt] for z_pnt in z_range]
-
-    plot_data = []
-
-    for z_value in z_value_list:
-        # cell center
-        z_mesh = np.full_like(wide_y_mesh, z_value)
-
-        if input_current_direction == 'x':
-            B_pump_y = calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True)
-            B_pump_y_list.append(B_pump_y)
-
-            B_pump_x = np.full_like(B_pump_y, 0.)
-            B_pump_x_list.append(B_pump_x)
-
-        elif input_current_direction == 'y':
-            B_pump_x = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.sin(np.deg2rad(current_direction) * (-1))
-            B_pump_x = B_pump_x[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end]
-            if max(list(map(lambda x: max(x), abs(B_pump_x)))) < 1e-15:
-                B_pump_x = np.full_like(B_pump_x, 0.)
-
-            # print(np.shape(B_pump_x))
-            
-            B_pump_x_list.append(B_pump_x)
-
-            # B_pump_y = np.full_like(B_pump_x, 0.)
-            B_pump_y = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, True), current_direction, (center_y_idx, center_x_idx)) * np.cos(np.deg2rad(current_direction))
-            B_pump_y = B_pump_y[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end]
-            if max(list(map(lambda x: max(x), abs(B_pump_y)))) < 1e-15:
-                B_pump_y = np.full_like(B_pump_y, 0.)
-            B_pump_y_list.append(B_pump_y)
-
-            # print(np.sin(np.deg2rad(current_direction)), np.cos(np.deg2rad(current_direction)))
-
-
-        B_pump_z = rotate_around_point(calc_magnetic_field(xy_plane_arr, z_mesh, ant_width, ant_thickness, input_current, False), current_direction, (center_y_idx, center_x_idx))
-        B_pump_z = B_pump_z[sample_y_idx_begin:sample_y_idx_end, sample_x_idx_begin:sample_x_idx_end]
-        if max(list(map(lambda x: max(x), abs(B_pump_z)))) < 1e-15:
-                B_pump_z = np.full_like(B_pump_z, 0.)
-
-        B_pump_z_list.append(B_pump_z)
-
-        # print("max(B_pump_x) [T] :", np.max(B_pump_x))
-        # print("max(B_pump_y) [T] :", np.max(B_pump_y))
-        # print("max(B_pump_z) [T] :", np.max(B_pump_z))
-        # print("max pumping field [T] :", np.max(np.sqrt(B_pump_x**2 + B_pump_y**2 + B_pump_z**2)))
-        
-        if check:
-            # plot_data.append(get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z))
+        for B_pump_x, B_pump_y, B_pump_z in zip(B_pump_x_list, B_pump_y_list, B_pump_z_list):
             plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, current_step, current_direction))
-        
-        # print((center_x_idx, center_y_idx))
-        
+            
+
     if len(plot_data) != 0:
         return plot_data
-    
+
     return B_pump_x_list, B_pump_y_list, B_pump_z_list
+
 
 def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
     
@@ -344,16 +231,25 @@ def get_data_dict(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z):
 
     return plot_data
 
-def get_map_scale(arr, i, current_direction):
-    if i == 0:
-        z_min = min(list(map(lambda x: min(x), arr))) if np.sin(np.deg2rad(current_direction)) * (-1) < 0 else 0
-        z_max = 0 if np.sin(np.deg2rad(current_direction)) * (-1) < 0 else max(list(map(lambda x: max(x), arr)))
-    elif i == 1:
-        z_min = min(list(map(lambda x: min(x), arr))) if np.cos(np.deg2rad(current_direction)) < 0 else 0
-        z_max = 0 if np.cos(np.deg2rad(current_direction)) < 0 else max(list(map(lambda x: max(x), arr)))
-    elif i == 2:
-        z_min = min(list(map(lambda x: min(x), arr)))
-        z_max = max(list(map(lambda x: max(x), abs(arr))))
+def get_map_scale(arr):
+    z_min = min(list(map(lambda x: min(x), arr)))
+    z_max = max(list(map(lambda x: max(x), arr)))
+
+    if z_min > 0 and z_max > 0:
+        z_min = 0
+    
+    if z_min < 0 and z_max < 0:
+        z_max = 0
+    
+    # if i == 0:
+    #     z_min = min(list(map(lambda x: min(x), arr))) if np.sin(np.deg2rad(current_direction)) * (-1) < 0 else 0
+    #     z_max = 0 if np.sin(np.deg2rad(current_direction)) * (-1) < 0 else max(list(map(lambda x: max(x), arr)))
+    # elif i == 1:
+    #     z_min = min(list(map(lambda x: min(x), arr))) if np.cos(np.deg2rad(current_direction)) < 0 else 0
+    #     z_max = 0 if np.cos(np.deg2rad(current_direction)) < 0 else max(list(map(lambda x: max(x), arr)))
+    # elif i == 2:
+    #     z_min = min(list(map(lambda x: min(x), arr)))
+    #     z_max = max(list(map(lambda x: max(x), abs(arr))))
     
     return z_min, z_max
 
@@ -375,7 +271,7 @@ def get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, z, current
         y_exp, y_unit = get_si_prefix(max(abs(y_arr)), "m")
         B_pump = [B_pump_x, B_pump_y, B_pump_z][i]
         z_exp, z_unit = get_si_prefix(max(list(map(lambda x: max(x), abs(B_pump)))), "T")
-        z_min, z_max = get_map_scale(B_pump / (10**z_exp), i, current_direction)
+        z_min, z_max = get_map_scale(B_pump / (10**z_exp))
         im = ax.pcolor(x_arr / (10**x_exp), y_arr / (10**y_exp), B_pump / (10**z_exp), cmap=cmap, rasterized=True, vmin=z_min, vmax=z_max)
         ax.locator_params(axis='x',nbins=10)
         ax.locator_params(axis='y',nbins=10)

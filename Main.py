@@ -1,18 +1,14 @@
-from pathlib2 import Path
-import math
-import json
-
 import output_ovf as oo
 import calc_field as cf
 
 import sys
 import os
-from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog, QProgressBar)
-from PyQt5.QtGui import QFont, QIcon, QPixmap
-from PyQt5.QtCore import Qt
-import matplotlib.pyplot as plt
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.figure import Figure
+import math
+import json
+
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog, QProgressBar, QTabWidget, QTabBar)
+from PyQt5.QtGui import QPixmap
+from PyQt5.QtCore import Qt, pyqtSignal
 
 def decimal_normalize(value):
     if isinstance(value, float) and value.is_integer():
@@ -38,6 +34,38 @@ def add_si_prefix(value, unit):
     si_prefix = prefixes[si_exponent]
     
     return f"{decimal_normalize(round(new_value, 3))}{si_prefix}{unit}"
+
+class PlusTabBar(QTabBar):
+    plusClicked = pyqtSignal()
+
+    def __init__(self):
+        super().__init__()
+
+        # Create the plus button
+        self.plus_button = QPushButton("+")
+        self.plus_button.setStyleSheet("""
+            QPushButton {
+                background-color: #4CAF50;
+                color: white;
+                padding: 8px 9px;
+                border: none;
+                border-radius: 8px;
+                font-weight: bold;
+                margin-right: 3px;
+                margin-left: 2px;
+                margin-top: 2px;
+                margin-bottom: 2px;
+            }
+            QPushButton:hover {
+                background-color: #45a049;
+            }
+        """)
+        # self.plus_button.setFixedSize(25, 25)
+        self.plus_button.clicked.connect(self.plusClicked)
+        
+        self.setDrawBase(False)
+        self.setExpanding(False)
+
 
 class CheckWindow(QDialog):
     def __init__(self, image_paths, seved_path, append_str, parent=None):
@@ -139,7 +167,6 @@ class CheckWindow(QDialog):
             print(f"Plot saved to {full_path}")
 
     def closeEvent(self, event):
-        # Delete temporary files when closing the window
         for path in self.image_paths:
             try:
                 os.remove(path)
@@ -159,6 +186,7 @@ class MainWindow(QWidget):
             QWidget {
                 background-color: #f0f0f0;
                 font-family: Arial;
+                font-size: 14px;
             }
             QLabel {
                 color: #333;
@@ -179,7 +207,19 @@ class MainWindow(QWidget):
                 background-color: #45a049;
             }
             QGroupBox {
+                border: 1px solid;
+                border-color: #c3db5a;
+                border-radius: 4px;
+                padding: 17px 0 2px 0;
                 font-weight: bold;
+                font-size: 15px;
+            }
+            QGroupBox::title {
+                color: black;
+                background: transparent;
+                subcontrol-origin: margin;
+                subcontrol-position: top center;
+                padding: 5px 0 0 0;
             }
             QComboBox {
                 background-color: #f8f8f8;
@@ -191,55 +231,59 @@ class MainWindow(QWidget):
             QListView {
                 background-color : #f8f8f8;
             }
+            QTabBar::tab {
+                width: 120px;
+                height: 30px;
+            }
         """)
 
         main_layout = QVBoxLayout()
 
         # Grid settings
-        grid_group = QGroupBox("Grid Settings")
+        grid_group = QGroupBox("Grid Size")
         grid_layout = QGridLayout()
         grid_group.setLayout(grid_layout)
 
-        self.n_x = QLineEdit("512")
-        self.n_y = QLineEdit("512")
-        self.n_z = QLineEdit("32")
-        grid_layout.addWidget(QLabel("n_x:"), 0, 0)
+        self.n_x = QLineEdit("500")
+        self.n_y = QLineEdit("50")
+        self.n_z = QLineEdit("5")
+        grid_layout.addWidget(QLabel("<i>N<sub>x</sub></i> :"), 0, 0)
         grid_layout.addWidget(self.n_x, 0, 1)
-        grid_layout.addWidget(QLabel("n_y:"), 0, 2)
+        grid_layout.addWidget(QLabel("<i>N<sub>y</sub></i> :"), 0, 2)
         grid_layout.addWidget(self.n_y, 0, 3)
-        grid_layout.addWidget(QLabel("n_z:"), 0, 4)
+        grid_layout.addWidget(QLabel("<i>N<sub>z</sub></i> :"), 0, 4)
         grid_layout.addWidget(self.n_z, 0, 5)
 
-        self.size_x = QLineEdit("2500.6e-6")
-        self.size_y = QLineEdit("25.6e-6")
-        self.size_z = QLineEdit("10e-6")
-        grid_layout.addWidget(QLabel("size_x (m):"), 1, 0)
+        self.size_x = QLineEdit("5e-5")
+        self.size_y = QLineEdit("5e-6")
+        self.size_z = QLineEdit("5e-8")
+        grid_layout.addWidget(QLabel("Size<i><sub>x</sub></i> (m) :"), 1, 0)
         grid_layout.addWidget(self.size_x, 1, 1)
-        grid_layout.addWidget(QLabel("size_y (m):"), 1, 2)
+        grid_layout.addWidget(QLabel("Size<i><sub>y</sub></i> (m) :"), 1, 2)
         grid_layout.addWidget(self.size_y, 1, 3)
-        grid_layout.addWidget(QLabel("size_z (m):"), 1, 4)
+        grid_layout.addWidget(QLabel("Size<i><sub>z</sub></i> (m) :"), 1, 4)
         grid_layout.addWidget(self.size_z, 1, 5)
 
         self.size_cell_x = QLineEdit()
         self.size_cell_y = QLineEdit()
         self.size_cell_z = QLineEdit()
-        grid_layout.addWidget(QLabel("size_cell_x (m):"), 2, 0)
+        grid_layout.addWidget(QLabel("CellSize<i><sub>x</sub></i> (m) :"), 2, 0)
         grid_layout.addWidget(self.size_cell_x, 2, 1)
-        grid_layout.addWidget(QLabel("size_cell_y (m):"), 2, 2)
+        grid_layout.addWidget(QLabel("CellSize<i><sub>y</sub></i> (m) :"), 2, 2)
         grid_layout.addWidget(self.size_cell_y, 2, 3)
-        grid_layout.addWidget(QLabel("size_cell_z (m):"), 2, 4)
+        grid_layout.addWidget(QLabel("CellSize<i><sub>z</sub></i> (m) :"), 2, 4)
         grid_layout.addWidget(self.size_cell_z, 2, 5)
 
         # Connect signals for automatic updates
-        self.n_x.editingFinished.connect(lambda: self.update_sizes('x', 'n'))
-        self.n_y.editingFinished.connect(lambda: self.update_sizes('y', 'n'))
-        self.n_z.editingFinished.connect(lambda: self.update_sizes('z', 'n'))
-        self.size_x.editingFinished.connect(lambda: self.update_sizes('x', 'size'))
-        self.size_y.editingFinished.connect(lambda: self.update_sizes('y', 'size'))
-        self.size_z.editingFinished.connect(lambda: self.update_sizes('z', 'size'))
-        self.size_cell_x.editingFinished.connect(lambda: self.update_sizes('x', 'cell'))
-        self.size_cell_y.editingFinished.connect(lambda: self.update_sizes('y', 'cell'))
-        self.size_cell_z.editingFinished.connect(lambda: self.update_sizes('z', 'cell'))
+        self.n_x.editingFinished.connect(lambda: (self.update_sizes('x', 'n'), self.update_append_text()))
+        self.n_y.editingFinished.connect(lambda: (self.update_sizes('y', 'n'), self.update_append_text()))
+        self.n_z.editingFinished.connect(lambda: (self.update_sizes('z', 'n'), self.update_append_text()))
+        self.size_x.editingFinished.connect(lambda: (self.update_sizes('x', 'size'), self.update_append_text()))
+        self.size_y.editingFinished.connect(lambda: (self.update_sizes('y', 'size'), self.update_append_text()))
+        self.size_z.editingFinished.connect(lambda: (self.update_sizes('z', 'size'), self.update_append_text()))
+        self.size_cell_x.editingFinished.connect(lambda: (self.update_sizes('x', 'cell'), self.update_append_text()))
+        self.size_cell_y.editingFinished.connect(lambda: (self.update_sizes('y', 'cell'), self.update_append_text()))
+        self.size_cell_z.editingFinished.connect(lambda: (self.update_sizes('z', 'cell'), self.update_append_text()))
 
         # Initial calculation of cell sizes
         self.update_sizes('x', 'n')
@@ -248,88 +292,37 @@ class MainWindow(QWidget):
 
         main_layout.addWidget(grid_group)
 
-        # Antenna settings
-        antenna_group = QGroupBox("Antenna Settings")
-        antenna_layout = QGridLayout()
-        antenna_group.setLayout(antenna_layout)
+        # Antenna Widget
+        antenna_widget = QWidget()
+        antenna_layout = QVBoxLayout()
+        antenna_widget.setLayout(antenna_layout)
 
-        self.ant_width = QLineEdit("500000e-9")      # Original: 500000e-9
-        self.ant_thickness = QLineEdit("18000e-9")   # Original: 18000e-9
-        self.ant_position = QLineEdit()              # Original: size_x/2
-        antenna_layout.addWidget(QLabel("Antenna Width (m):"), 0, 0)
-        antenna_layout.addWidget(self.ant_width, 0, 1)
-        antenna_layout.addWidget(QLabel("Thickness (m):"), 0, 2)
-        antenna_layout.addWidget(self.ant_thickness, 0, 3)
-        antenna_layout.addWidget(QLabel("Position (m):"), 0, 4)
-        antenna_layout.addWidget(self.ant_position, 0, 5)
+        # Create tab widget
+        self.tab_widget = QTabWidget()
+        self.tab_widget.setTabsClosable(False)
+        antenna_layout.addWidget(self.tab_widget)
 
-        self.ant_position_x = QLineEdit("1250.3e-6")
-        self.ant_position_y = QLineEdit("12.8e-6")
-        antenna_layout.addWidget(QLabel("x (m):"), 1, 0)
-        antenna_layout.addWidget(self.ant_position_x, 1, 1)
-        antenna_layout.addWidget(QLabel("y (m):"), 1, 2)
-        antenna_layout.addWidget(self.ant_position_y, 1, 3)
+        self.puls_tab_bar = PlusTabBar()
+        self.tab_widget.setCornerWidget(self.puls_tab_bar.plus_button, Qt.TopRightCorner)
+        self.puls_tab_bar.plusClicked.connect(self.add_antenna_tab)
 
-        self.distance = QLineEdit("0.1e-9")  # Original: 0.1e-9
-        antenna_layout.addWidget(QLabel("Distance between antenna and sample (m):"), 2, 0, 1, 3)
-        antenna_layout.addWidget(self.distance, 2, 3, 1, 3)
+        main_layout.addWidget(antenna_widget)
 
-        self.current_direction = QLineEdit("0")  # Original: 0.1e-9
-        antenna_layout.addWidget(QLabel("Current direction (degree):"), 3, 0, 1, 3)
-        antenna_layout.addWidget(self.current_direction, 3, 3, 1, 3)
+        # Conditions settings
+        cond_group = QGroupBox("Conditions")
+        cond_layout = QGridLayout()
+        cond_group.setLayout(cond_layout)
 
-        main_layout.addWidget(antenna_group)
+        self.save_conditions = QCheckBox("Save conditions at calculation.")
+        self.save_conditions.setChecked(True)
+        self.save_button = QPushButton("Save", clicked=self.save_current_conditions)
+        self.load_button = QPushButton("Load", clicked=self.load_conditions)
 
-        # Input settings
-        input_group = QGroupBox("Input Settings")
-        input_layout = QGridLayout()
-        input_group.setLayout(input_layout)
+        cond_layout.addWidget(self.save_conditions, 0, 0)
+        cond_layout.addWidget(self.save_button, 0, 1)
+        cond_layout.addWidget(self.load_button, 0, 2)
 
-        self.input_current = QLineEdit()
-        self.input_voltage = QLineEdit("5")  # Original: 5
-        self.input_power_dBm = QLineEdit()
-        self.input_power_W = QLineEdit()
-        self.impedance = QLineEdit("50")     # Original: 50
-        input_layout.addWidget(QLabel("Current (A):"), 0, 0)
-        input_layout.addWidget(self.input_current, 0, 1)
-        input_layout.addWidget(QLabel("Peak Voltage (V):"), 0, 2)
-        input_layout.addWidget(self.input_voltage, 0, 3)
-        input_layout.addWidget(QLabel("Power (dBm):"), 1, 0)
-        input_layout.addWidget(self.input_power_dBm, 1, 1)
-        input_layout.addWidget(QLabel("Power (W):"), 1, 2)
-        input_layout.addWidget(self.input_power_W, 1, 3)
-        input_layout.addWidget(QLabel("Impedance (Ω):"), 2, 0)
-        input_layout.addWidget(self.impedance, 2, 1)
-
-        self.waveform = QComboBox(input_group)
-        self.waveform.addItem("Sin wave")
-        self.waveform.addItem("Square wave")
-        input_layout.addWidget(QLabel("Waveform :"), 2, 2)
-        input_layout.addWidget(self.waveform, 2, 3)
-
-        # Connect signals for automatic updates
-        self.input_current.editingFinished.connect(lambda: self.update_inputs('current'))
-        self.input_voltage.editingFinished.connect(lambda: self.update_inputs('voltage'))
-        self.input_power_dBm.editingFinished.connect(lambda: self.update_inputs('power_dBm'))
-        self.input_power_W.editingFinished.connect(lambda: self.update_inputs('power_W'))
-        self.impedance.editingFinished.connect(lambda: self.update_inputs('impedance'))
-        self.waveform.currentIndexChanged.connect(lambda: self.update_inputs('waveform'))
-
-        # Initial calculation of inputs
-        self.update_inputs('voltage')
-
-        main_layout.addWidget(input_group)
-
-        # check settings
-        check_group = QGroupBox("Check")
-        check_layout = QGridLayout()
-        check_group.setLayout(check_layout)
-
-        self.field_check = QCheckBox("Field Check")
-        self.field_check.setChecked(True)  # Original: True
-        check_layout.addWidget(self.field_check, 0, 0, 0, 6)
-
-        main_layout.addWidget(check_group)
+        main_layout.addWidget(cond_group)
 
         # Output settings
         output_group = QGroupBox("Output Settings")
@@ -342,8 +335,6 @@ class MainWindow(QWidget):
         self.output_extension.addItem(".ovf")
         self.output_extension.addItem(".txt")
         self.append_filename = QLineEdit()
-        self.save_conditions = QCheckBox("Save conditions")
-        self.load_button = QPushButton("Load", clicked=self.load_conditions)
         
         output_layout.addWidget(QLabel("Path:"), 0, 0)
         output_layout.addWidget(self.dir_str, 0, 1)
@@ -353,12 +344,11 @@ class MainWindow(QWidget):
         output_layout.addWidget(QLabel("Append Filename:"), 2, 0)
         output_layout.addWidget(self.append_filename, 2, 1)
         output_layout.addWidget(self.output_extension, 2, 2)
-        output_layout.addWidget(self.save_conditions, 3, 0)
-        output_layout.addWidget(self.load_button, 3, 2)
 
         main_layout.addWidget(output_group)
 
-        self.append_filename.editingFinished.connect(lambda: self.update_append_text())
+        # self.append_filename.editingFinished.connect(lambda: self.update_append_text())
+        self.update_append_text()
 
         # Add check and calculate buttons in a horizontal layout
         button_layout = QHBoxLayout()
@@ -376,6 +366,125 @@ class MainWindow(QWidget):
         main_layout.addWidget(self.progress_bar)
 
         self.setLayout(main_layout)
+
+        # Initial antenna tab
+        self.add_antenna_tab()
+
+    def create_antenna_widget(self):
+        widget = QWidget()
+        layout = QGridLayout()
+        widget.setLayout(layout)
+
+        # Antenna Settings group
+        ant_group = QGroupBox("Antenna Settings")
+        ant_layout = QGridLayout()
+        ant_group.setLayout(ant_layout)
+
+        ant_width = QLineEdit("5e-6")
+        ant_width.setObjectName("ant_width")
+        ant_thickness = QLineEdit("100e-9")
+        ant_thickness.setObjectName("ant_thickness")
+        ant_layout.addWidget(QLabel("Width (m):"), 0, 0)
+        ant_layout.addWidget(ant_width, 0, 1)
+        ant_layout.addWidget(QLabel("Thickness (m):"), 0, 2)
+        ant_layout.addWidget(ant_thickness, 0, 3)
+
+        ant_position_x = QLineEdit("2.5e-5")
+        ant_position_x.setObjectName("ant_position_x")
+        ant_position_y = QLineEdit("2.5e-6")
+        ant_position_y.setObjectName("ant_position_y")
+        ant_layout.addWidget(QLabel("x (m):"), 1, 0)
+        ant_layout.addWidget(ant_position_x, 1, 1)
+        ant_layout.addWidget(QLabel("y (m):"), 1, 2)
+        ant_layout.addWidget(ant_position_y, 1, 3)
+
+        distance = QLineEdit("1e-12")
+        distance.setObjectName("distance")
+        ant_layout.addWidget(QLabel("Distance between antenna and sample (m):"), 2, 0, 1, 2)
+        ant_layout.addWidget(distance, 2, 2, 1, 2)
+
+        current_direction = QLineEdit("90")
+        current_direction.setObjectName("current_direction")
+        ant_layout.addWidget(QLabel("Current direction (degree):"), 3, 0, 1, 2)
+        ant_layout.addWidget(current_direction, 3, 2, 1, 2)
+
+        layout.addWidget(ant_group)
+
+        # Input Current group
+        input_group = QGroupBox("Input Current")
+        input_layout = QGridLayout()
+        input_group.setLayout(input_layout)
+
+        input_current = QLineEdit()
+        input_current.setObjectName("input_current")
+        input_voltage = QLineEdit("5")
+        input_voltage.setObjectName("input_voltage")
+        input_power_dBm = QLineEdit()
+        input_power_dBm.setObjectName("input_power_dBm")
+        input_power_W = QLineEdit()
+        input_power_W.setObjectName("input_power_W")
+        impedance = QLineEdit("50")
+        impedance.setObjectName("impedance")
+        input_layout.addWidget(QLabel("Current (A):"), 0, 0)
+        input_layout.addWidget(input_current, 0, 1)
+        input_layout.addWidget(QLabel("Peak Voltage (V):"), 0, 2)
+        input_layout.addWidget(input_voltage, 0, 3)
+        input_layout.addWidget(QLabel("Power (dBm):"), 1, 0)
+        input_layout.addWidget(input_power_dBm, 1, 1)
+        input_layout.addWidget(QLabel("Power (W):"), 1, 2)
+        input_layout.addWidget(input_power_W, 1, 3)
+        input_layout.addWidget(QLabel("Impedance (Ω):"), 2, 0)
+        input_layout.addWidget(impedance, 2, 1)
+
+        waveform = QComboBox()
+        waveform.setObjectName("waveform")
+        waveform.addItem("Sin wave")
+        waveform.addItem("Square wave")
+        input_layout.addWidget(QLabel("Waveform :"), 2, 2)
+        input_layout.addWidget(waveform, 2, 3)
+
+        layout.addWidget(input_group)
+
+        input_current.editingFinished.connect(lambda: (self.update_tab_inputs('current'), self.update_append_text()))
+        input_voltage.editingFinished.connect(lambda: (self.update_tab_inputs('voltage'), self.update_append_text()))
+        input_power_dBm.editingFinished.connect(lambda: (self.update_tab_inputs('power_dBm'), self.update_append_text()))
+        input_power_W.editingFinished.connect(lambda: (self.update_tab_inputs('power_W'), self.update_append_text()))
+        impedance.editingFinished.connect(lambda: (self.update_tab_inputs('impedance'), self.update_append_text()))
+        waveform.currentIndexChanged.connect(lambda: (self.update_tab_inputs('waveform'), self.update_append_text()))
+
+        return widget
+
+    def add_antenna_tab(self):
+        new_tab = self.create_antenna_widget()
+        tab_index = self.tab_widget.addTab(new_tab, f"Antenna {self.tab_widget.count() + 1}")
+        self.tab_widget.setCurrentIndex(tab_index)
+        self.add_close_button(tab_index)
+        self.update_tab_inputs('voltage')
+        self.update_append_text()
+
+    def add_close_button(self, index):
+        close_button = QPushButton("✖")
+        close_button.setStyleSheet("QPushButton { background-color: transparent; color: black; padding: 2px 2px; border: none; border-radius: 8px; } QPushButton:hover { background-color: #E6E6E6; }")
+        close_button.clicked.connect(lambda: self.close_tab(self.sender()))
+        self.tab_widget.tabBar().setTabButton(index, QTabBar.RightSide, close_button)
+
+    def close_tab(self, button):
+        index = -1
+        for i in range(self.tab_widget.count()):
+            if self.tab_widget.tabBar().tabButton(i, QTabBar.RightSide) == button:
+                index = i
+                break
+        
+        if index != -1 and self.tab_widget.count() > 1:  # Keep at least one antenna tab
+            self.tab_widget.removeTab(index)
+            self.update_tab_names()
+        
+        self.update_append_text()
+
+    def update_tab_names(self):
+        for i in range(self.tab_widget.count()):
+            self.tab_widget.setTabText(i, f"Antenna {i + 1}")
+
 
     def update_sizes(self, dimension, changed_field):
         try:
@@ -410,81 +519,109 @@ class MainWindow(QWidget):
                 self.size_z.setText(f"{size:.6e}")
 
         except ValueError:
-            # If conversion fails, don't update the sizes
             pass
     
-    def update_inputs(self, changed_field):
+    def update_inputs(self, changed_field, input_current, input_voltage, input_power_dBm, input_power_W, impedance, waveform):
         try:
-            current = float(self.input_current.text()) if self.input_current.text() else 0
-            voltage = float(self.input_voltage.text()) if self.input_voltage.text() else 0
-            power_dBm = float(self.input_power_dBm.text()) if self.input_power_dBm.text() else 0
-            power_W = float(self.input_power_W.text()) if self.input_power_W.text() else 0
-            impedance = float(self.impedance.text()) if self.impedance.text() else 50
-            waveform = self.waveform.currentText()
+            current = float(input_current.text()) if input_current.text() else 0
+            voltage = float(input_voltage.text()) if input_voltage.text() else 0
+            power_dBm = float(input_power_dBm.text()) if input_power_dBm.text() else 0
+            power_W = float(input_power_W.text()) if input_power_W.text() else 0
+            impedance_value = float(impedance.text()) if impedance.text() else 50
+            waveform_text = waveform.currentText()
 
-            if waveform == "Sin wave":
+            if waveform_text == "Sin wave":
                 if changed_field == 'current':
-                    voltage = current * impedance
+                    voltage = current * impedance_value
                     voltage_rms = voltage / math.sqrt(2)
-                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance * 1e3)
-                    power_W = voltage_rms * voltage_rms / impedance
+                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance_value * 1e3)
+                    power_W = voltage_rms * voltage_rms / impedance_value
                 elif changed_field == 'voltage':
                     voltage_rms = voltage / math.sqrt(2)
-                    current = voltage / impedance
-                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance * 1e3)
-                    power_W = voltage_rms * voltage_rms / impedance
+                    current = voltage / impedance_value
+                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance_value * 1e3)
+                    power_W = voltage_rms * voltage_rms / impedance_value
                 elif changed_field == 'power_dBm':
                     power_W = 10 ** ((power_dBm - 30) / 10)
-                    voltage = math.sqrt(power_W * impedance) * math.sqrt(2)
-                    current = voltage / impedance                    
+                    voltage = math.sqrt(power_W * impedance_value) * math.sqrt(2)
+                    current = voltage / impedance_value                    
                 elif changed_field == 'power_W':
-                    voltage = math.sqrt(power_W * impedance) * math.sqrt(2)
-                    current = voltage / impedance
+                    voltage = math.sqrt(power_W * impedance_value) * math.sqrt(2)
+                    current = voltage / impedance_value
                     voltage_rms = voltage / math.sqrt(2)
-                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance * 1e3)
+                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance_value * 1e3)
                 elif changed_field == 'impedance' or 'waveform':
-                    voltage = current * impedance
+                    voltage = current * impedance_value
                     voltage_rms = voltage / math.sqrt(2)
-                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance * 1e3)
-                    power_W = voltage_rms * voltage_rms / impedance
+                    power_dBm = 10 * math.log10(voltage_rms * voltage_rms / impedance_value * 1e3)
+                    power_W = voltage_rms * voltage_rms / impedance_value
 
-            elif waveform == "Square wave":
+            elif waveform_text == "Square wave":
                 if changed_field == 'current':
-                    voltage = current * impedance
-                    power_dBm = 10 * math.log10(voltage * voltage / impedance * 1e3)
-                    power_W = voltage * voltage / impedance
+                    voltage = current * impedance_value
+                    power_dBm = 10 * math.log10(voltage * voltage / impedance_value * 1e3)
+                    power_W = voltage * voltage / impedance_value
                 elif changed_field == 'voltage':
-                    current = voltage / impedance
-                    power_dBm = 10 * math.log10(voltage * voltage / impedance * 1e3)
-                    power_W = voltage * voltage / impedance
+                    current = voltage / impedance_value
+                    power_dBm = 10 * math.log10(voltage * voltage / impedance_value * 1e3)
+                    power_W = voltage * voltage / impedance_value
                 elif changed_field == 'power_dBm':
                     power_W = 10 ** ((power_dBm - 30) / 10)
-                    voltage = math.sqrt(power_W * impedance)
-                    current = voltage / impedance                    
+                    voltage = math.sqrt(power_W * impedance_value)
+                    current = voltage / impedance_value                    
                 elif changed_field == 'power_W':
-                    voltage = math.sqrt(power_W * impedance)
-                    current = voltage / impedance
-                    power_dBm = 10 * math.log10(voltage * voltage / impedance * 1e3)
+                    voltage = math.sqrt(power_W * impedance_value)
+                    current = voltage / impedance_value
+                    power_dBm = 10 * math.log10(voltage * voltage / impedance_value * 1e3)
                 elif changed_field == 'impedance' or 'waveform':
-                    voltage = current * impedance
-                    power_dBm = 10 * math.log10(voltage * voltage / impedance * 1e3)
-                    power_W = voltage * voltage / impedance
+                    voltage = current * impedance_value
+                    power_dBm = 10 * math.log10(voltage * voltage / impedance_value * 1e3)
+                    power_W = voltage * voltage / impedance_value
 
-            self.input_current.setText(f"{current:.6e}")
-            self.input_voltage.setText(f"{voltage:.6e}")
-            self.input_power_dBm.setText(f"{power_dBm:.6f}")
-            self.input_power_W.setText(f"{power_W:.6e}")
-            self.impedance.setText(f"{impedance:.6f}")                
+            return {
+                'current': current,
+                'voltage': voltage,
+                'power_dBm': power_dBm,
+                'power_W': power_W,
+                'impedance': impedance_value,
+                'waveform': waveform_text
+            }              
 
         except ValueError:
-            # If conversion fails, don't update the sizes
             pass
+    
+    def update_tab_inputs(self, changed_field):
+        for i in range(self.tab_widget.count()):
+            tab = self.tab_widget.widget(i)
+            
+            input_current = tab.findChild(QLineEdit, "input_current")
+            input_voltage = tab.findChild(QLineEdit, "input_voltage")
+            input_power_dBm = tab.findChild(QLineEdit, "input_power_dBm")
+            input_power_W = tab.findChild(QLineEdit, "input_power_W")
+            impedance = tab.findChild(QLineEdit, "impedance")
+            waveform = tab.findChild(QComboBox, "waveform")
+
+            updated_values = self.update_inputs(changed_field, input_current, input_voltage, input_power_dBm, input_power_W, impedance, waveform)
+            
+            if updated_values:
+                input_current.setText(f"{updated_values['current']:.6e}")
+                input_voltage.setText(f"{updated_values['voltage']:.6e}")
+                input_power_dBm.setText(f"{updated_values['power_dBm']:.6f}")
+                input_power_W.setText(f"{updated_values['power_W']:.6e}")
+                impedance.setText(f"{updated_values['impedance']:.6f}")
+                waveform.setCurrentText(updated_values['waveform'])
     
     def update_append_text(self):
         try:
-            n_x = self.n_x.text() if self.n_x.text() else 0
-            n_y = self.n_y.text() if self.n_y.text() else 0
-            n_z = self.n_z.text() if self.n_z.text() else 0
+            dir_path = self.dir_str.text()
+            output_filename = self.output_filename.text()
+            output_extension = self.output_extension.currentText()
+            path_len = len(dir_path) + len(output_filename) + len(output_extension) + 2
+            
+
+            n_x = int(self.n_x.text()) if self.n_x.text() else 0
+            n_y = int(self.n_y.text()) if self.n_y.text() else 0
+            n_z = int(self.n_z.text()) if self.n_z.text() else 0
             n_str = f"{n_x}x{n_y}x{n_z}cells"
 
             size_x = float(self.size_x.text()) if self.size_x.text() else 0
@@ -492,21 +629,56 @@ class MainWindow(QWidget):
             size_z = float(self.size_z.text()) if self.size_z.text() else 0
             size_str = f"{add_si_prefix(size_x, 'm')}x{add_si_prefix(size_y, 'm')}x{add_si_prefix(size_z, 'm')}"
 
-            ant_width = float(self.ant_width.text()) if self.size_z.text() else 0
-            ant_position_x = float(self.ant_position_x.text()) if self.ant_position_x.text() else 0
-            ant_position_y = float(self.ant_position_y.text()) if self.ant_position_y.text() else 0
-            distance = float(self.distance.text()) if self.distance.text() else 0
-            current_direction = float(self.current_direction.text()) if self.current_direction.text() else 0
-            input_current = float(self.input_current.text()) if self.input_current.text() else 0
-            antenna_str = f"t{add_si_prefix(ant_width, 'm')}_x{add_si_prefix(ant_position_x, 'm')}_y{add_si_prefix(ant_position_y, 'm')}_s2a{add_si_prefix(distance, 'm')}_{add_si_prefix(current_direction, 'deg')}_I{add_si_prefix(input_current, 'A')}"
-
-            self.append_filename.setText(f"{n_str}_{size_str}_{antenna_str}")
-
-            # print(n_str, size_str)
+            path_len += len(n_str) + len(size_str) + 1
+            
+            ant_dict_list = self.get_antenna_parameters()
+            antenna_str = ""
+            for i, ant_dict in enumerate(ant_dict_list):
+                antenna_str += f"_ant{i+1}_t{add_si_prefix(ant_dict['ant_width'], 'm')}_x{add_si_prefix(ant_dict['ant_position_x'], 'm')}_y{add_si_prefix(ant_dict['ant_position_y'], 'm')}_s2a{add_si_prefix(ant_dict['distance'], 'm')}_{add_si_prefix(ant_dict['current_direction'], 'deg')}_I{add_si_prefix(ant_dict['input_current'], 'A')}"
+                path_len += len(antenna_str)
+                if path_len > 240:
+                    antenna_str = f"_{len(ant_dict_list)}Antennas"
+                    break
+            self.append_filename.setText(f"{n_str}_{size_str}{antenna_str}")
 
         except ValueError:
-            # If conversion fails, don't update the sizes
             pass
+    
+    def get_antenna_parameters(self):
+        antenna_params = []
+        for i in range(self.tab_widget.count()):
+            tab = self.tab_widget.widget(i)
+            
+            ant_width = float(tab.findChild(QLineEdit, "ant_width").text())
+            ant_thickness = float(tab.findChild(QLineEdit, "ant_thickness").text())
+            ant_position_x = float(tab.findChild(QLineEdit, "ant_position_x").text())
+            ant_position_y = float(tab.findChild(QLineEdit, "ant_position_y").text())
+            distance = float(tab.findChild(QLineEdit, "distance").text())
+            current_direction = float(tab.findChild(QLineEdit, "current_direction").text())
+            
+            input_current = float(tab.findChild(QLineEdit, "input_current").text()) if tab.findChild(QLineEdit, "input_current").text() else 0
+            input_voltage = float(tab.findChild(QLineEdit, "input_voltage").text())
+            input_power_dBm = float(tab.findChild(QLineEdit, "input_power_dBm").text()) if tab.findChild(QLineEdit, "input_power_dBm").text() else 0
+            input_power_W = float(tab.findChild(QLineEdit, "input_power_W").text()) if tab.findChild(QLineEdit, "input_power_W").text() else 0
+            impedance = float(tab.findChild(QLineEdit, "impedance").text())
+            waveform = tab.findChild(QComboBox, "waveform").currentText()
+            
+            antenna_params.append({
+                "ant_width": ant_width,
+                "ant_thickness": ant_thickness,
+                "ant_position_x": ant_position_x,
+                "ant_position_y": ant_position_y,
+                "distance": distance,
+                "current_direction": current_direction,
+                "input_current": input_current,
+                "input_voltage": input_voltage,
+                "input_power_dBm": input_power_dBm,
+                "input_power_W": input_power_W,
+                "impedance": impedance,
+                "waveform": waveform
+            })
+        
+        return antenna_params               
     
     def open_check_window(self):
         image_paths = self.calculate(True)
@@ -531,12 +703,11 @@ class MainWindow(QWidget):
 
     def calculate(self, check):
         self.disable_inputs()
-        if self.save_conditions.isChecked():
+        if self.save_conditions.isChecked() and not check:
             self.save_current_conditions()
         
         self.progress_bar.setValue(0)
 
-        # Here you would implement the calculation logic
         try:
             n_x = int(self.n_x.text())
             n_y = int(self.n_y.text())
@@ -546,20 +717,7 @@ class MainWindow(QWidget):
             size_y = float(self.size_y.text())
             size_z = float(self.size_z.text())
 
-            input_current_direction = ['x', 'y'][1]
-
-            ant_position_x = float(self.ant_position_x.text())
-            ant_position_y = float(self.ant_position_y.text())
-
-            current_direction = float(self.current_direction.text())
-
-            ant_width = float(self.ant_width.text())
-            ant_thickness = float(self.ant_thickness.text())
-            ant_position = float(self.ant_position.text())
-
-            distance_between_antenna_and_sample = float(self.distance.text())
-
-            input_current =  float(self.input_current.text())
+            ant_dict = self.get_antenna_parameters()
 
             total_steps = n_z if check else 1
 
@@ -569,13 +727,13 @@ class MainWindow(QWidget):
                     progress = int((step + 1) / total_steps * 100)
                     self.progress_bar.setValue(progress)
                     QApplication.processEvents()
-                    result.append(cf.get_magnetic_field_1(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, ant_position_x, ant_position_y, distance_between_antenna_and_sample, current_direction, input_current, check, step)[0])
+                    result.append(cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, ant_dict, check, step)[0])
                     if step == total_steps - 1:
                         image_paths = result
             else:
                 self.progress_bar.setValue(50)
                 QApplication.processEvents()
-                B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, ant_position_x, ant_position_y, distance_between_antenna_and_sample, current_direction, input_current)
+                B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, ant_dict)
 
                 self.progress_bar.setValue(75)
                 QApplication.processEvents()
@@ -603,28 +761,34 @@ class MainWindow(QWidget):
             'size_x': self.size_x.text(),
             'size_y': self.size_y.text(),
             'size_z': self.size_z.text(),
-            'ant_width': self.ant_width.text(),
-            'ant_thickness': self.ant_thickness.text(),
-            'ant_position': self.ant_position.text(),
-            'ant_position_x': self.ant_position_x.text(),
-            'ant_position_y': self.ant_position_y.text(),
-            'distance': self.distance.text(),
-            'current_direction': self.current_direction.text(),
-            'input_current': self.input_current.text(),
-            'input_voltage': self.input_voltage.text(),
-            'input_power_dBm': self.input_power_dBm.text(),
-            'input_power_W': self.input_power_W.text(),
-            'impedance': self.impedance.text(),
-            'waveform': self.waveform.currentText(),
-            'field_check': self.field_check.isChecked(),
             'dir_str': self.dir_str.text(),
             'output_filename': self.output_filename.text(),
-            'output_extension': self.output_extension.currentText()
+            'output_extension': self.output_extension.currentText(),
+            'antennas': []
         }
         
-        with open(os.path.join(self.dir_str.text(), self.output_filename.text() + '_cond.json'), 'w') as f:
+        # Save conditions for each antenna tab
+        for i in range(self.tab_widget.count()):
+            tab = self.tab_widget.widget(i)
+            antenna_conditions = {
+                'ant_width': tab.findChild(QLineEdit, "ant_width").text(),
+                'ant_thickness': tab.findChild(QLineEdit, "ant_thickness").text(),
+                'ant_position_x': tab.findChild(QLineEdit, "ant_position_x").text(),
+                'ant_position_y': tab.findChild(QLineEdit, "ant_position_y").text(),
+                'distance': tab.findChild(QLineEdit, "distance").text(),
+                'current_direction': tab.findChild(QLineEdit, "current_direction").text(),
+                'input_current': tab.findChild(QLineEdit, "input_current").text(),
+                'input_voltage': tab.findChild(QLineEdit, "input_voltage").text(),
+                'input_power_dBm': tab.findChild(QLineEdit, "input_power_dBm").text(),
+                'input_power_W': tab.findChild(QLineEdit, "input_power_W").text(),
+                'impedance': tab.findChild(QLineEdit, "impedance").text(),
+                'waveform': tab.findChild(QComboBox, "waveform").currentText()
+            }
+            conditions['antennas'].append(antenna_conditions)
+        
+        with open(os.path.join(self.dir_str.text(), 'cond_' + self.output_filename.text() + '_' + self.append_filename.text() + '.json'), 'w') as f:
             json.dump(conditions, f)
-    
+
     def load_conditions(self):
         file_name, _ = QFileDialog.getOpenFileName(self, "Load Conditions", "", "JSON Files (*.json)")
         if file_name:
@@ -637,81 +801,41 @@ class MainWindow(QWidget):
             self.size_x.setText(conditions['size_x'])
             self.size_y.setText(conditions['size_y'])
             self.size_z.setText(conditions['size_z'])
-            self.ant_width.setText(conditions['ant_width'])
-            self.ant_thickness.setText(conditions['ant_thickness'])
-            self.ant_position.setText(conditions['ant_position'])
-            self.ant_position_x.setText(conditions['ant_position_x'])
-            self.ant_position_y.setText(conditions['ant_position_y'])
-            self.distance.setText(conditions['distance'])
-            self.current_direction.setText(conditions['current_direction'])
-            self.input_current.setText(conditions['input_current'])
-            self.input_voltage.setText(conditions['input_voltage'])
-            self.input_power_dBm.setText(conditions['input_power_dBm'])
-            self.input_power_W.setText(conditions['input_power_W'])
-            self.impedance.setText(conditions['impedance'])
-            self.waveform.setCurrentText(conditions['waveform'])
-            self.field_check.setChecked(conditions['field_check'])
+
+            self.update_sizes('x', 'n')
+            self.update_sizes('y', 'n')
+            self.update_sizes('z', 'n')
+
             self.dir_str.setText(conditions['dir_str'])
             self.output_filename.setText(conditions['output_filename'])
             self.output_extension.setCurrentText(conditions['output_extension'])
+            
+            # Remove existing antenna tabs
+            while self.tab_widget.count() > 0:
+                self.tab_widget.removeTab(0)
+            
+            # Load conditions for each antenna tab
+            for antenna_conditions in conditions['antennas']:
+                self.add_antenna_tab()
+                tab = self.tab_widget.widget(self.tab_widget.count() - 1)
+                
+                tab.findChild(QLineEdit, "ant_width").setText(antenna_conditions['ant_width'])
+                tab.findChild(QLineEdit, "ant_thickness").setText(antenna_conditions['ant_thickness'])
+                tab.findChild(QLineEdit, "ant_position_x").setText(antenna_conditions['ant_position_x'])
+                tab.findChild(QLineEdit, "ant_position_y").setText(antenna_conditions['ant_position_y'])
+                tab.findChild(QLineEdit, "distance").setText(antenna_conditions['distance'])
+                tab.findChild(QLineEdit, "current_direction").setText(antenna_conditions['current_direction'])
+                tab.findChild(QLineEdit, "input_current").setText(antenna_conditions['input_current'])
+                tab.findChild(QLineEdit, "input_voltage").setText(antenna_conditions['input_voltage'])
+                tab.findChild(QLineEdit, "input_power_dBm").setText(antenna_conditions['input_power_dBm'])
+                tab.findChild(QLineEdit, "input_power_W").setText(antenna_conditions['input_power_W'])
+                tab.findChild(QLineEdit, "impedance").setText(antenna_conditions['impedance'])
+                tab.findChild(QComboBox, "waveform").setCurrentText(antenna_conditions['waveform'])
+            
+            self.update_append_text()
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
     ex = MainWindow()
     ex.show()
     sys.exit(app.exec_())
-
-# # number of cell
-# n_x = 512
-# n_y = 512
-# n_z = 32
-
-# append_str = f"_{n_x}x{n_y}x{n_z}cells"
-
-# # size of sample
-# size_x = 2500.6e-6		# [m]
-# size_y = 25.6e-6		# [m]
-# size_z = 10e-6		# [m]
-
-# append_str += f"_{add_si_prefix(size_x, 'm')}x{add_si_prefix(size_y, 'm')}x{add_si_prefix(size_z, 'm')}"
-
-# # size of cell
-# size_cell_x = size_x / n_x
-# size_cell_y = size_y / n_y
-# size_cell_z = size_z / n_z
-
-# # antenna
-# # ant_width = 500000e-9     # [m]
-# # ant_thickness = 18000e-9  # [m]
-# # ant_position = 5e-6    # [m]
-# ant_width = 500000e-9     # [m]
-# ant_thickness = 18000e-9  # [m]
-# ant_position = size_x/2 - ant_width/2    # [m]
-# ant_position = size_x/2
-# # ant_position  = size_x/2
-# # ant_position = 20e-6    # [m]
-# distance_between_antenna_and_sample = 0.1e-9  # [m]
-# append_str += f"_antw{add_si_prefix(ant_width, 'm')}_t{add_si_prefix(ant_thickness, 'm')}_p{add_si_prefix(ant_position, 'm')}_s2a{add_si_prefix(distance_between_antenna_and_sample, 'm')}"
-
-# input_current_direction = ['x', 'y'][1]
-# input_current = 10e-3    # [A]
-# input_voltage = 5   # [V]
-# # input_voltage = 0.5617   # [V]
-# impedance = 50.
-# input_current = input_voltage / impedance
-# append_str += f"_I{add_si_prefix(input_current, 'A')}_{input_current_direction}"
-
-# field_check = True
-
-# print(append_str)
-
-# B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, input_current_direction, ant_width, ant_thickness, ant_position, distance_between_antenna_and_sample, input_current, field_check)
-
-# dir_str = input('Please input the output directory path: ')
-# dir_path = Path(dir_str)
-# output_filename = 'antenna' + append_str + '.ovf'
-# output_path = os.path.join(dir_path, output_filename)
-
-# oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
-
-
