@@ -344,61 +344,19 @@ def figure_setting():
 
 def figure_size_setting(num_plots=3):
     plt = figure_setting()
-    ax_w_px = 400  # プロット領域の幅をピクセル単位で指定
-    ax_h_px = 400  # プロット領域の高さをピクセル単位で指定
+    ax_w_px = 400  # Width of plot area in pixels
+    ax_h_px = 400  # Height of plot area in pixels
 
     fig_dpi = 300
     ax_w_inch = ax_w_px / fig_dpi
     ax_h_inch = ax_h_px / fig_dpi
     ax_margin_inch = (0.7, 0.5, 0.7, 0.5)  # Left,Top,Right,Bottom [inch]
-    inter_plot_margin_inch = 0.7  # グラフ間の余白 [inch]
-    colorbar_width_inch = 0.075  # カラーバーの幅 [inch]
-    colorbar_margin_inch = 0.05  # カラーバーと図の余白 [inch]
+    inter_plot_margin_inch = 0.7  # Margins between graphs [inch].
+    colorbar_width_inch = 0.075  # Color bar width [inch]
+    colorbar_margin_inch = 0.05  # Color bars and figure margins [inch].
 
     fig_w_inch = num_plots * (ax_w_inch + colorbar_margin_inch + colorbar_width_inch) + (num_plots - 1) * inter_plot_margin_inch + ax_margin_inch[0] + ax_margin_inch[2]
     fig_h_inch = ax_h_inch + ax_margin_inch[1] + ax_margin_inch[3]
-
-    fig = plt.figure(dpi=fig_dpi, figsize=(fig_w_inch, fig_h_inch))
-    
-    ax_p_w = [Size.Fixed(ax_margin_inch[0])] + [Size.Fixed(ax_w_inch), Size.Fixed(colorbar_margin_inch), Size.Fixed(colorbar_width_inch), Size.Fixed(inter_plot_margin_inch)] * (num_plots - 1) + [Size.Fixed(ax_w_inch), Size.Fixed(colorbar_margin_inch), Size.Fixed(colorbar_width_inch), Size.Fixed(ax_margin_inch[2])]
-
-    ax_p_h = [Size.Fixed(ax_margin_inch[1]), Size.Fixed(ax_h_inch)]
-    divider = Divider(fig, (0.0, 0.0, 1.0, 1.0), ax_p_w, ax_p_h, aspect=False)
-    
-    axes = []
-    caxes = []
-    for i in range(num_plots):
-        ax = Axes(fig, divider.get_position())
-        ax.set_axes_locator(divider.new_locator(nx=4*i+1, ny=1))
-        fig.add_axes(ax)
-        axes.append(ax)
-
-        color_ax = Axes(fig, divider.get_position())
-        color_ax.set_axes_locator(divider.new_locator(nx=4*i+3, ny=1))
-        fig.add_axes(color_ax)
-        caxes.append(color_ax)
-
-    # colorbar size
-    shrink = ax_h_inch / fig_h_inch
-
-    return plt, fig, axes, caxes, shrink
-
-def figure_size_setting_check(num_plots=3):
-    plt = figure_setting()
-    ax_w_px = 200  # プロット領域の幅をピクセル単位で指定
-    ax_h_px = 200  # プロット領域の高さをピクセル単位で指定
-
-    fig_dpi = 150
-    ax_w_inch = ax_w_px / fig_dpi
-    ax_h_inch = ax_h_px / fig_dpi
-    ax_margin_inch = (0.7, 0.5, 0.7, 0.5)  # Left,Top,Right,Bottom [inch]
-    inter_plot_margin_inch = 0.7  # グラフ間の余白 [inch]
-    colorbar_width_inch = 0.075  # カラーバーの幅 [inch]
-    colorbar_margin_inch = 0.05  # カラーバーと図の余白 [inch]
-
-    fig_w_inch = num_plots * (ax_w_inch + colorbar_margin_inch + colorbar_width_inch) + (num_plots - 1) * inter_plot_margin_inch + ax_margin_inch[0] + ax_margin_inch[2]
-    fig_h_inch = ax_h_inch + ax_margin_inch[1] + ax_margin_inch[3]
-    # print(fig_w_inch, fig_h_inch)
 
     fig = plt.figure(dpi=fig_dpi, figsize=(fig_w_inch, fig_h_inch))
     

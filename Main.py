@@ -1,14 +1,30 @@
 import output_ovf as oo
 import calc_field as cf
+import get_icon as gi
 
 import sys
 import os
 import math
 import json
+import ctypes
 
-from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog, QProgressBar, QTabWidget, QTabBar)
+from PyQt5.QtWidgets import (QApplication, QWidget, QLabel, QLineEdit, QGridLayout, QPushButton, QFileDialog, QCheckBox, QGroupBox, QVBoxLayout, QHBoxLayout, QComboBox, QSlider, QDialog, QProgressBar, QTabWidget, QTabBar, QFrame)
 from PyQt5.QtGui import QPixmap
 from PyQt5.QtCore import Qt, pyqtSignal
+
+BACKGROUND_COLOR = "#f0f0f0"
+FONT_FAMILY = "Arial"
+LABEL_COLOR = "#333"
+BORDER_COLOR = "#ccc"
+BUTTON_COLOR = "#191970"
+BUTTON_HOVER_COLOR = "#0000cd"
+GROUP_BOX_BORDER_COLOR = "#3B4252"
+COMBO_BOX_BG_COLOR = "#f8f8f8"
+COMBO_BOX_SELECTION_COLOR = "#f00000"
+BUTTON_FONT_COLOR = "white"
+CLOSE_BUTTON_HOVER = "#E6E6E6"
+CLOSE_BUTTON_FONT_COLOR = "black"
+FOOTER_FONT_COLOR = "#666"
 
 def decimal_normalize(value):
     if isinstance(value, float) and value.is_integer():
@@ -35,31 +51,44 @@ def add_si_prefix(value, unit):
     
     return f"{decimal_normalize(round(new_value, 3))}{si_prefix}{unit}"
 
+def get_windows_display_scale():
+        hdc = ctypes.windll.user32.GetDC(0)
+        dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
+        ctypes.windll.user32.ReleaseDC(0, hdc)
+        return dpi / 96.0
+
 class PlusTabBar(QTabBar):
     plusClicked = pyqtSignal()
 
     def __init__(self):
         super().__init__()
+        scale_factor = get_windows_display_scale()
+        tab_padding_x = f"{int(8 * scale_factor)}px"
+        tab_padding_y = f"{int(9 * scale_factor)}px"
+        border_radius = f"{int(8 * scale_factor)}px"
+        margin_small = f"{int(3 * scale_factor)}px"
+        margin_large = f"{int(2 * scale_factor)}px"
 
         # Create the plus button
         self.plus_button = QPushButton("+")
-        self.plus_button.setStyleSheet("""
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                padding: 8px 9px;
+        self.plus_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {BUTTON_COLOR};
+                color: {BUTTON_FONT_COLOR};
+                padding: {tab_padding_x} {tab_padding_y};
                 border: none;
-                border-radius: 8px;
+                border-radius: {border_radius};
                 font-weight: bold;
-                margin-right: 3px;
-                margin-left: 2px;
-                margin-top: 2px;
-                margin-bottom: 2px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
+                margin-right: {margin_small};
+                margin-left: {margin_large};
+                margin-top: {margin_large};
+                margin-bottom: {margin_large};
+            }}
+            QPushButton:hover {{
+                background-color: {BUTTON_HOVER_COLOR};
+            }}
         """)
+
         # self.plus_button.setFixedSize(25, 25)
         self.plus_button.clicked.connect(self.plusClicked)
         
@@ -71,7 +100,8 @@ class CheckWindow(QDialog):
     def __init__(self, image_paths, seved_path, append_str, parent=None):
         super().__init__(parent)
         self.setWindowTitle('Check Plot')
-        self.setGeometry(200, 200, 1100, 420)
+        scale_factor = get_windows_display_scale()
+        self.setGeometry(int(200 * scale_factor), int(200 * scale_factor), int(1100 * scale_factor), int(420 * scale_factor))
         
         layout = QVBoxLayout()
         
@@ -91,7 +121,7 @@ class CheckWindow(QDialog):
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(0)
         self.slider.setMaximum(len(image_paths) - 1)
-        self.slider.valueChanged.connect(self.update_plot)
+        self.slider.valueChanged.connect(lambda: (self.update_plot(), self.update_name(append_str)))
         slider_layout.addWidget(self.slider)
         
         # Increase z button
@@ -117,7 +147,7 @@ class CheckWindow(QDialog):
         # Filename and extension
         file_layout = QHBoxLayout()
         file_layout.addWidget(QLabel("Output Filename:"))
-        self.save_filename = QLineEdit("PumpedField" + append_str)
+        self.save_filename = QLineEdit()
         file_layout.addWidget(self.save_filename)
         self.save_extension = QComboBox()
         self.save_extension.addItem(".png")
@@ -135,12 +165,17 @@ class CheckWindow(QDialog):
         
         self.image_paths = image_paths
         self.update_plot()
+        self.update_name(append_str)
     
     def browse_save_path(self):
         dir_path = QFileDialog.getExistingDirectory(self, "Select Directory")
         if dir_path:
             self.save_path.setText(dir_path)
     
+    def update_name(self, append_str):
+        z = self.slider.value()
+        self.save_filename.setText(f"PumpedField_z{str(z)}_{append_str}")
+
     def update_plot(self):
         z = self.slider.value()
         pixmap = QPixmap(self.image_paths[z])
@@ -180,61 +215,77 @@ class MainWindow(QWidget):
         self.initUI()
 
     def initUI(self):
-        self.setWindowTitle('Antenna Field Calculator')
-        self.setGeometry(100, 100, 600, 500)
-        self.setStyleSheet("""
-            QWidget {
-                background-color: #f0f0f0;
-                font-family: Arial;
-                font-size: 14px;
-            }
-            QLabel {
-                color: #333;
-            }
-            QLineEdit, QComboBox {
-                padding: 5px;
-                border: 1px solid #ccc;
-                border-radius: 3px;
-            }
-            QPushButton {
-                background-color: #4CAF50;
-                color: white;
-                padding: 8px 16px;
+        scale_factor = get_windows_display_scale()
+        width = int(650 * scale_factor)
+        height = int(880 * scale_factor)
+        self.setFixedSize(width, height)
+        self.setWindowTitle('Microtrip Antenna Magnetic Field Calculator')
+
+        # Define size variables
+        font_size = f"{int(14 * scale_factor)}px"
+        padding_small = f"{int(5 * scale_factor)}px"
+        padding_medium = f"{int(8 * scale_factor)}px"
+        padding_large = f"{int(16 * scale_factor)}px"
+        border_radius = f"{int(3 * scale_factor)}px"
+        border_radius_large = f"{int(4 * scale_factor)}px"
+        group_box_padding = f"{int(17 * scale_factor)}px 0 {int(2 * scale_factor)}px 0"
+        tab_width = f"{int(120 * scale_factor)}px"
+        tab_height = f"{int(30 * scale_factor)}px"
+        footer_font_size = f"{int(12 * scale_factor)}px"
+        
+        self.setStyleSheet(f"""
+            QWidget {{
+                background-color: {BACKGROUND_COLOR};
+                font-family: {FONT_FAMILY};
+                font-size: {font_size};
+            }}
+            QLabel {{
+                color: {LABEL_COLOR};
+            }}
+            QLineEdit, QComboBox {{
+                padding: {padding_small};
+                border: 1px solid {BORDER_COLOR};
+                border-radius: {border_radius};
+            }}
+            QPushButton {{
+                background-color: {BUTTON_COLOR};
+                color: {BUTTON_FONT_COLOR};
+                padding: {padding_medium} {padding_large};
                 border: none;
-                border-radius: 4px;
-            }
-            QPushButton:hover {
-                background-color: #45a049;
-            }
-            QGroupBox {
+                border-radius: {border_radius_large};
+            }}
+            QPushButton:hover {{
+                background-color: {BUTTON_HOVER_COLOR};
+            }}
+            QGroupBox {{
                 border: 1px solid;
-                border-color: #c3db5a;
-                border-radius: 4px;
-                padding: 17px 0 2px 0;
+                border-color: {GROUP_BOX_BORDER_COLOR};
+                border-radius: {border_radius_large};
+                padding: {group_box_padding};
                 font-weight: bold;
                 font-size: 15px;
-            }
-            QGroupBox::title {
+            }}
+            QGroupBox::title {{
                 color: black;
                 background: transparent;
                 subcontrol-origin: margin;
                 subcontrol-position: top center;
-                padding: 5px 0 0 0;
-            }
-            QComboBox {
-                background-color: #f8f8f8;
-                selection-background-color: #f00000
-            }
-            QComboBox::drop-down {
+                padding: {padding_small} 0 0 0;
+            }}
+            QComboBox {{
+                background-color: {COMBO_BOX_BG_COLOR};
+                selection-background-color: {COMBO_BOX_SELECTION_COLOR}
+            }}
+            QComboBox::drop-down {{
                 border: none;
-            }
-            QListView {
-                background-color : #f8f8f8;
-            }
-            QTabBar::tab {
-                width: 120px;
-                height: 30px;
-            }
+            }}
+            QListView {{
+                background-color : {COMBO_BOX_BG_COLOR};
+            }}
+            QTabBar::tab {{
+                width: {tab_width};
+                height: {tab_height};
+            }}
         """)
 
         main_layout = QVBoxLayout()
@@ -333,7 +384,7 @@ class MainWindow(QWidget):
         self.output_filename = QLineEdit("antenna")
         self.output_extension = QComboBox()
         self.output_extension.addItem(".ovf")
-        self.output_extension.addItem(".txt")
+        # self.output_extension.addItem(".txt")
         self.append_filename = QLineEdit()
         
         output_layout.addWidget(QLabel("Path:"), 0, 0)
@@ -365,6 +416,32 @@ class MainWindow(QWidget):
         self.progress_bar.hide()
         main_layout.addWidget(self.progress_bar)
 
+        # Footer
+        footer_widget = QWidget()
+        footer_layout = QHBoxLayout(footer_widget)
+        footer_layout.setContentsMargins(0, 0, 0, 0)
+
+        version_label = QLabel("v1.0")
+        version_label.setStyleSheet(f"color: {FOOTER_FONT_COLOR}; font-size: {footer_font_size};")
+
+        copyright_label = QLabel("© Shoki Nezu")
+        copyright_label.setStyleSheet(f"color: {FOOTER_FONT_COLOR}; font-size: {footer_font_size};")
+
+        footer_layout.addWidget(version_label)
+        footer_layout.addStretch()
+        footer_layout.addWidget(copyright_label)
+
+        footer_widget.setFixedHeight(int(12 * scale_factor))
+
+        footer_widget.setStyleSheet(f"""
+            QWidget {{
+                background-color: {BACKGROUND_COLOR};
+                border-top: none;
+            }}
+        """)
+
+        main_layout.addWidget(footer_widget)
+
         self.setLayout(main_layout)
 
         # Initial antenna tab
@@ -384,28 +461,28 @@ class MainWindow(QWidget):
         ant_width.setObjectName("ant_width")
         ant_thickness = QLineEdit("100e-9")
         ant_thickness.setObjectName("ant_thickness")
-        ant_layout.addWidget(QLabel("Width (m):"), 0, 0)
+        ant_layout.addWidget(QLabel("Width (m) :"), 0, 0)
         ant_layout.addWidget(ant_width, 0, 1)
-        ant_layout.addWidget(QLabel("Thickness (m):"), 0, 2)
+        ant_layout.addWidget(QLabel("Thickness (m) :"), 0, 2)
         ant_layout.addWidget(ant_thickness, 0, 3)
 
         ant_position_x = QLineEdit("2.5e-5")
         ant_position_x.setObjectName("ant_position_x")
         ant_position_y = QLineEdit("2.5e-6")
         ant_position_y.setObjectName("ant_position_y")
-        ant_layout.addWidget(QLabel("x (m):"), 1, 0)
+        ant_layout.addWidget(QLabel("x (m) :"), 1, 0)
         ant_layout.addWidget(ant_position_x, 1, 1)
-        ant_layout.addWidget(QLabel("y (m):"), 1, 2)
+        ant_layout.addWidget(QLabel("y (m) :"), 1, 2)
         ant_layout.addWidget(ant_position_y, 1, 3)
 
         distance = QLineEdit("1e-12")
         distance.setObjectName("distance")
-        ant_layout.addWidget(QLabel("Distance between antenna and sample (m):"), 2, 0, 1, 2)
+        ant_layout.addWidget(QLabel("Distance between antenna and sample (m) :"), 2, 0, 1, 2)
         ant_layout.addWidget(distance, 2, 2, 1, 2)
 
         current_direction = QLineEdit("90")
         current_direction.setObjectName("current_direction")
-        ant_layout.addWidget(QLabel("Current direction (degree):"), 3, 0, 1, 2)
+        ant_layout.addWidget(QLabel("Current direction (degree) :"), 3, 0, 1, 2)
         ant_layout.addWidget(current_direction, 3, 2, 1, 2)
 
         layout.addWidget(ant_group)
@@ -425,15 +502,15 @@ class MainWindow(QWidget):
         input_power_W.setObjectName("input_power_W")
         impedance = QLineEdit("50")
         impedance.setObjectName("impedance")
-        input_layout.addWidget(QLabel("Current (A):"), 0, 0)
+        input_layout.addWidget(QLabel("Current (A) :"), 0, 0)
         input_layout.addWidget(input_current, 0, 1)
-        input_layout.addWidget(QLabel("Peak Voltage (V):"), 0, 2)
+        input_layout.addWidget(QLabel("Peak Voltage (V) :"), 0, 2)
         input_layout.addWidget(input_voltage, 0, 3)
-        input_layout.addWidget(QLabel("Power (dBm):"), 1, 0)
+        input_layout.addWidget(QLabel("Power (dBm) :"), 1, 0)
         input_layout.addWidget(input_power_dBm, 1, 1)
-        input_layout.addWidget(QLabel("Power (W):"), 1, 2)
+        input_layout.addWidget(QLabel("Power (W) :"), 1, 2)
         input_layout.addWidget(input_power_W, 1, 3)
-        input_layout.addWidget(QLabel("Impedance (Ω):"), 2, 0)
+        input_layout.addWidget(QLabel("Impedance (Ω) :"), 2, 0)
         input_layout.addWidget(impedance, 2, 1)
 
         waveform = QComboBox()
@@ -464,7 +541,20 @@ class MainWindow(QWidget):
 
     def add_close_button(self, index):
         close_button = QPushButton("✖")
-        close_button.setStyleSheet("QPushButton { background-color: transparent; color: black; padding: 2px 2px; border: none; border-radius: 8px; } QPushButton:hover { background-color: #E6E6E6; }")
+        scale_factor = get_windows_display_scale()
+        close_button_padding = f"{int(2 * scale_factor)}px {int(2 * scale_factor)}px"
+        close_button_redius = f"{int(8 * scale_factor)}px"
+        close_button.setStyleSheet(f"""
+            QPushButton {{
+                background-color: transparent; 
+                color: {CLOSE_BUTTON_FONT_COLOR}; 
+                padding: {close_button_padding};
+                border: none;
+                border-radius: {close_button_redius};
+            }}
+            QPushButton:hover {{
+                background-color: {CLOSE_BUTTON_HOVER};
+            }}""")
         close_button.clicked.connect(lambda: self.close_tab(self.sender()))
         self.tab_widget.tabBar().setTabButton(index, QTabBar.RightSide, close_button)
 
@@ -683,7 +773,7 @@ class MainWindow(QWidget):
     def open_check_window(self):
         image_paths = self.calculate(True)
         if image_paths:
-            self.check_window = CheckWindow(image_paths, self.dir_str.text(), "append", self)
+            self.check_window = CheckWindow(image_paths, self.dir_str.text(), self.append_filename.text(), self)
             self.check_window.show()
 
     def browse_dir(self):
@@ -836,6 +926,7 @@ class MainWindow(QWidget):
 
 if __name__ == '__main__':
     app = QApplication(sys.argv)
+    app.setWindowIcon(gi.iconFromBase64())
     ex = MainWindow()
     ex.show()
     sys.exit(app.exec_())
