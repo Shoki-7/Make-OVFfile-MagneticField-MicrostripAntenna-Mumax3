@@ -1,0 +1,33 @@
+// number of cell
+Nx := 500
+Ny := 50
+Nz := 5
+setgridsize (Nx,Ny,Nz)
+
+// size of sample
+sizeX := 5e-5		// 50 um
+sizeY := 5e-6		//  5 um
+sizeZ := 5e-8		// 50 nm
+setcellsize (sizeX/Nx, sizeY/Ny, sizeZ/Nz)
+
+m = uniform(0,1,0)
+
+// YIG parameter
+Msat  = 0.14e6		// Saturation magnetization 		(A/m)
+Aex   = 3.5e-12		// Exchange stiffness 			(J/m)
+alpha = 0.0001		// Landau-Lifshitz damping constant
+
+// set externally applied field
+Bex := 20e-3
+B_ext = vector(0, Bex, 0)	// Externally applied field (T)
+
+relax()
+
+// excitation spin wave
+freq := 1.75e9
+
+// rf excitation field
+B_ext.add(loadfile("antenna_500x50x5cells_50µmx5µmx50nm_ant1_t5µm_x25µm_y2.5µm_s2a1pm_90deg_I2mA.ovf"), sin(2*pi*freq*t))
+
+run(30e-9)
+
