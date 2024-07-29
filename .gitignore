@@ -10,3 +10,4 @@ icon.png
 dist
 build
 Main.spec
+integrate_test.py
