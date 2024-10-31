@@ -417,7 +417,6 @@ class MainWindow(QWidget):
         main_layout.addWidget(self.progress_bar)
 
 
-
         self.setLayout(main_layout)
 
         # Initial antenna tab

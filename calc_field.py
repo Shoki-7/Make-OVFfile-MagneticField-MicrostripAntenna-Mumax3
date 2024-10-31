@@ -94,7 +94,8 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
 
     size_cell = size_cell_x if size_cell_x < size_cell_y else size_cell_y
     size_xy = size_x if size_x > size_y else size_y
-    n_xy = int(size_xy // size_cell)
+    # n_xy = int(size_xy // size_cell)
+    n_xy = int(round(size_xy / size_cell))
 
     xy_arr = np.linspace(size_cell / 2, size_xy - size_cell / 2, n_xy)
 
@@ -131,9 +132,9 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
         center_y_idx = get_nearest_index(wide_xy_arr, ant_position_y)
 
         sample_x_idx_begin = get_nearest_index(wide_xy_arr, x_arr[0])
-        sample_x_idx_end = get_nearest_index(wide_xy_arr, x_arr[-1])
+        sample_x_idx_end = get_nearest_index(wide_xy_arr, x_arr[-1]) + 1 * max(1, int(round(size_cell / size_cell_x)))
         sample_y_idx_begin = get_nearest_index(wide_xy_arr, y_arr[0])
-        sample_y_idx_end = get_nearest_index(wide_xy_arr, y_arr[-1])
+        sample_y_idx_end = get_nearest_index(wide_xy_arr, y_arr[-1]) + 1 * max(1, int(round(size_cell / size_cell_y)))
 
         if check:
             # Only process the current_step when checking
