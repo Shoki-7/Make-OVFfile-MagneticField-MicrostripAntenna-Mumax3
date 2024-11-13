@@ -61,7 +61,7 @@ def get_windows_display_scale():
         hdc = ctypes.windll.user32.GetDC(0)
         dpi = ctypes.windll.gdi32.GetDeviceCaps(hdc, 88)
         ctypes.windll.user32.ReleaseDC(0, hdc)
-        return dpi / 96.0
+        return dpi / 96.0 * 0.9
 
 class PlusTabBar(QTabBar):
     plusClicked = pyqtSignal()
@@ -127,7 +127,7 @@ class CheckWindow(QDialog):
         self.slider = QSlider(Qt.Horizontal)
         self.slider.setMinimum(0)
         self.slider.setMaximum(len(image_paths) - 1)
-        self.slider.valueChanged.connect(lambda: (self.update_plot(), self.update_name(append_str)))
+        self.slider.valueChanged.connect(lambda: (self.update_plot(img_scale_factor), self.update_name(append_str)))
         slider_layout.addWidget(self.slider)
         
         # Increase z button
@@ -170,7 +170,8 @@ class CheckWindow(QDialog):
         self.setLayout(layout)
         
         self.image_paths = image_paths
-        self.update_plot()
+        img_scale_factor = scale_factor * 0.6
+        self.update_plot(img_scale_factor)
         self.update_name(append_str)
     
     def browse_save_path(self):
@@ -180,12 +181,13 @@ class CheckWindow(QDialog):
     
     def update_name(self, append_str):
         z = self.slider.value()
-        self.save_filename.setText(f"PumpedField_z{str(z)}_{append_str}")
+        self.save_filename.setText(f"PumpedField_{append_str}_z{str(z)}")
 
-    def update_plot(self):
+    def update_plot(self, scale_factor):
         z = self.slider.value()
         pixmap = QPixmap(self.image_paths[z])
-        self.image_label.setPixmap(pixmap)
+        scaled_pixmap = pixmap.scaled(int(pixmap.width() * scale_factor), int(pixmap.height() * scale_factor), Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        self.image_label.setPixmap(scaled_pixmap)
         self.image_label.setScaledContents(True)
     
     def decrease_z(self):
@@ -224,7 +226,7 @@ class MainWindow(QWidget):
         scale_factor = get_windows_display_scale()
         width = int(650 * scale_factor)
         height = int(880 * scale_factor)
-        self.setFixedSize(width, height)
+        # self.setFixedSize(width, height)
         self.setWindowTitle('Microtrip Antenna Magnetic Field Calculator')
 
         # Define size variables
