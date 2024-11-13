@@ -2,6 +2,12 @@ import output_ovf as oo
 import calc_field as cf
 import get_icon as gi
 
+try:
+    import footer_widget as fw
+    footer_available = True
+except ImportError:
+    footer_available = False
+
 import sys
 import os
 import math
@@ -416,6 +422,9 @@ class MainWindow(QWidget):
         self.progress_bar.hide()
         main_layout.addWidget(self.progress_bar)
 
+        if footer_available:
+            footer_widget = fw.create_footer_widget(FOOTER_FONT_COLOR, footer_font_size, BACKGROUND_COLOR, scale_factor)
+            main_layout.addWidget(footer_widget)
 
         self.setLayout(main_layout)
 

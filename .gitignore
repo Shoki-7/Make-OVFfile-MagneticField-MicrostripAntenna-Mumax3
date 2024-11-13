@@ -11,3 +11,4 @@ dist
 build
 Main.spec
 integrate_test.py
+footer_widget.py
