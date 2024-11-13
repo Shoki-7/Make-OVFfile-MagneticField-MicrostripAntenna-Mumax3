@@ -793,29 +793,26 @@ class MainWindow(QWidget):
 
             ant_dict = self.get_antenna_parameters()
 
-            total_steps = n_z if check else 1
+            total_steps = n_z
 
-            if check:
-                result = []
-                for step in range(total_steps):
-                    progress = int((step + 1) / total_steps * 100)
-                    self.progress_bar.setValue(progress)
-                    QApplication.processEvents()
+            result = []
+
+            dir_path = self.dir_str.text()
+            output_filename = self.output_filename.text() + "_" + self.append_filename.text() + self.output_extension.currentText()
+            output_path = os.path.join(dir_path, output_filename)
+            
+            for step in range(total_steps):
+                progress = int((step + 1) / total_steps * 100)
+                self.progress_bar.setValue(progress)
+                QApplication.processEvents()
+
+                if check:
                     result.append(cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, ant_dict, check, step)[0])
                     if step == total_steps - 1:
                         image_paths = result
-            else:
-                self.progress_bar.setValue(50)
-                QApplication.processEvents()
-                B_pump_x_list, B_pump_y_list, B_pump_z_list = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, ant_dict)
-
-                self.progress_bar.setValue(75)
-                QApplication.processEvents()
-                dir_path = self.dir_str.text()
-                output_filename = self.output_filename.text() + "_" + self.append_filename.text() + self.output_extension.currentText()
-                output_path = os.path.join(dir_path, output_filename)
-                # oo.write_oommf_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
-                oo.write_oommf_binary_file(output_path, n_x, n_y, n_z, B_pump_x_list, B_pump_y_list, B_pump_z_list)
+                else:
+                    B_pump_x_array, B_pump_y_array, B_pump_z_array = cf.get_magnetic_field(n_x, n_y, n_z, size_x, size_y, size_z, ant_dict, current_step=step)
+                    oo.write_oommf_binary_file_step(step, output_path, n_x, n_y, n_z, B_pump_x_array, B_pump_y_array, B_pump_z_array)
 
             self.progress_bar.setValue(100)
             QApplication.processEvents()

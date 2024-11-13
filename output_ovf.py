@@ -100,4 +100,64 @@ def write_oommf_binary_file(output_filename: str, n_x: int, n_y: int, n_z: int,
         # フッターを書き込み
         file.write(footer.encode('utf-8'))
 
-    print(f"Binary OOMMF file successfully saved to {output_filename}")
+def write_oommf_binary_file_step(current_z: int, output_filename: str, n_x: int, n_y: int, n_z: int, 
+                                B_pump_x_array, B_pump_y_array, B_pump_z_array, endianness='<f') -> None:
+    """
+    バイナリ形式でOOMMFファイルを書き出す。
+
+    Parameters
+    ----------
+    current_z : int
+        保存するz方向の層の値
+    output_filename : str
+        出力ファイルのパス
+    n_x : int
+        x方向のノード数
+    n_y : int
+        y方向のノード数
+    n_z : int
+        z方向のノード数
+    B_pump_x_array : 2D array
+        Bxのスカラーデータ配列
+    B_pump_y_array : 2D array
+        Byのスカラーデータ配列
+    B_pump_z_array : 2D array
+        Bzのスカラーデータ配列
+    endianness : str
+        エンディアン（デフォルトはリトルエンディアン `<f`）
+    """
+
+    # ヘッダーとフッターの生成
+    if current_z == 0:
+        header = get_header(n_x, n_y, n_z)
+    if current_z + 1 == n_z:
+        footer = get_footer()
+
+    # ファイルモードを決定
+    mode = 'wb' if current_z == 0 else 'ab'
+
+    # バイナリファイルを開く
+    with open(output_filename, mode) as file:
+        # ヘッダーを書き込み（最初の層のみ）
+        if current_z == 0:
+            file.write(header.encode('utf-8'))
+            # コントロールナンバーを書き込み
+            file.write(struct.pack(endianness, OVF_CONTROL_NUMBER_4))
+
+        
+
+        # current_z の層のデータをバイナリ形式で書き込み
+        B_pump_x = B_pump_x_array
+        B_pump_y = B_pump_y_array
+        B_pump_z = B_pump_z_array
+
+        for y in range(n_y):
+            for x in range(n_x):
+                # x, y, z 各方向のスカラー値をバイナリ形式で書き込む
+                file.write(struct.pack(endianness, B_pump_x[y][x]))
+                file.write(struct.pack(endianness, B_pump_y[y][x]))
+                file.write(struct.pack(endianness, B_pump_z[y][x]))
+
+        # フッターを追加（最後の層のみ）
+        if current_z + 1 == n_z:
+            file.write(footer.encode('utf-8'))

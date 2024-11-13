@@ -136,7 +136,7 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
         sample_y_idx_begin = get_nearest_index(wide_xy_arr, y_arr[0])
         sample_y_idx_end = get_nearest_index(wide_xy_arr, y_arr[-1]) + 1 * max(1, int(round(size_cell / size_cell_y)))
 
-        if check:
+        if not current_step is None:
             # Only process the current_step when checking
             z_range = range(current_step, current_step + 1)
         else:
@@ -199,10 +199,12 @@ def get_magnetic_field(n_x: int, n_y: int, n_z: int, size_x: int, size_y: int, s
     if check:
         for B_pump_x, B_pump_y, B_pump_z in zip(B_pump_x_list, B_pump_y_list, B_pump_z_list):
             plot_data.append(get_field_temp_figure(x_arr, y_arr, B_pump_x, B_pump_y, B_pump_z, current_step, current_direction))
-            
 
     if len(plot_data) != 0:
         return plot_data
+    
+    if not current_step is None:
+        return B_pump_x_list[0], B_pump_y_list[0], B_pump_z_list[0]
 
     return B_pump_x_list, B_pump_y_list, B_pump_z_list
 
