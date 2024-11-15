@@ -13,3 +13,4 @@ Main.spec
 integrate_test.py
 footer_widget.py
 read_ovf_file.py
+.venv

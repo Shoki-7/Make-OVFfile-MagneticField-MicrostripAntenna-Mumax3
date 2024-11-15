@@ -804,7 +804,7 @@ class MainWindow(QWidget):
             output_path = os.path.join(dir_path, output_filename)
             
             for step in range(total_steps):
-                progress = int((step + 1) / total_steps * 100)
+                progress = int((step + 1) / total_steps * 90)
                 self.progress_bar.setValue(progress)
                 QApplication.processEvents()
 
